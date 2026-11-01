@@ -7,6 +7,7 @@
 
 mod assets;
 mod i18n_report;
+mod i18n_russian;
 mod ico;
 mod keytips;
 mod layers;
@@ -28,6 +29,8 @@ commands:
   test            workspace tests (cargo nextest when installed, else cargo test), then doctests
   assets          check that every icon/image/font/sample file is attributed in ATTRIBUTION.md
   i18n-report     list the interface strings each language doesn't translate yet (always passes)
+  i18n-russian [--dry-run]
+                  fill missing Russian catalog entries using machine translation (existing entries stay unchanged)
   layers          enforce the crate dependency layering (AGENTS.md \"Layering\")
   wasm            cargo check --target wasm32-unknown-unknown for the L0-L5 crates (+ gridcraft-web), one call
   parity [--check] [--out PATH]
@@ -47,6 +50,7 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("assets") => assets::run(&root()),
         Some("i18n-report") => i18n_report::run(&root()),
+        Some("i18n-russian") => i18n_russian::run(&root(), &rest),
         Some("layers") => cmd_layers(),
         Some("wasm") => cmd_wasm(),
         Some("test") => cmd_test().and_then(|()| cmd_doctest()),
