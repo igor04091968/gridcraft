@@ -41,6 +41,7 @@ craft-update = { workspace = true }
 # The desktop's preferred language for the first-run interface language.
 sys-locale = { workspace = true }
 craft-window = { workspace = true }
+toml = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Read the browser's preferred language for the first-run web interface language.

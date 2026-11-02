@@ -14,6 +14,8 @@ use crate::SheetApp;
 use crate::theme;
 
 mod about;
+#[cfg(not(target_arch = "wasm32"))]
+mod agent_control;
 mod analysis;
 mod charts;
 mod command_search;

@@ -10,6 +10,13 @@ Two backends:
 |---|---|---|
 | Headless (default) | `gridcraft-cli mcp [--in book.xlsx \| --sample budget]` | An in-process engine session — no window. |
 | Remote | `gridcraft-cli mcp --connect 7979` | A running app started with `gridcraft --control 7979` (TCP JSON lines on `127.0.0.1`, authenticated with the app's token: it is read from the app's token file or `GRIDCRAFT_CONTROL_TOKEN`, see [`control-protocol.md`](control-protocol.md)). |
+| Remote, start on demand | `gridcraft-cli mcp --connect 7979 --launch /path/to/gridcraft` | Connects to the running app, or starts it with the control channel enabled. |
+
+## Desktop integration
+
+Open **Automate → Agent Control (MCP)…**, select **Kimi Code** or **Codex**, choose **This project** or **All projects**, and click **Install integration**. GridCraft updates the selected client's MCP configuration, preserves other servers, and creates a `.bak` backup. Start a new agent session after installation; the agent launches GridCraft on demand. **Remove integration** removes only GridCraft's entry.
+
+Kimi uses `.kimi-code/mcp.json`; Codex uses `.codex/config.toml`. Project scope places these directories under the current working directory. Both `gridcraft` and `gridcraft-cli` must be installed in the same directory.
 
 ## Claude Code
 

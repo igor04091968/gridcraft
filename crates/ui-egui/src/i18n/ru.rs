@@ -510,6 +510,20 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Add to Dictionary" => "Добавить в словарь",
         "Add-in and Automation" => "Надстройка и автоматизация",
         "Agent Control" => "Управление агентом",
+        "Agent:" => "Агент:",
+        "After installation, start a new agent session. Keep other MCP servers configured in the same file: they are preserved." => {
+            "После установки начните новую сессию агента. Другие MCP-серверы в этом файле сохраняются."
+        }
+        "All projects" => "Все проекты",
+        "Connect an AI agent to this desktop app. The agent starts GridCraft automatically when needed." => {
+            "Подключите ИИ-агента к этому приложению. Агент будет автоматически запускать GridCraft при необходимости."
+        }
+        "Control port:" => "Порт управления:",
+        "Desktop agent integration is available in the native GridCraft app." => "Интеграция с агентами доступна в настольном приложении GridCraft.",
+        "Install integration" => "Установить интеграцию",
+        "Remove integration" => "Удалить интеграцию",
+        "Scope:" => "Область:",
+        "This project" => "Этот проект",
         "Aggregate duplicates using" => "Объедините дубликаты с помощью",
         "Align Left" => "Выровнять по левому краю",
         "Align Right" => "Выровнять по правому краю",
@@ -651,7 +665,9 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Double Accounting" => "Двойной учет",
         "Doughnut" => "Пончик",
         "Down" => "Вниз",
-        "Drag to fill cells. Drag from inside a cell to select a range." => "Перетащите, чтобы заполнить ячейки. Перетащите курсор из ячейки, чтобы выбрать диапазон.",
+        "Drag to fill cells. Drag from inside a cell to select a range." => {
+            "Перетащите, чтобы заполнить ячейки. Перетащите курсор из ячейки, чтобы выбрать диапазон."
+        }
         "Duplicate Values…" => "Повторяющиеся значения…",
         "Edit Name" => "Изменить имя",
         "Edit chart title" => "Изменить заголовок диаграммы",
@@ -692,7 +708,9 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Footer:" => "Нижний колонтитул:",
         "Forecast Sheet" => "Лист прогноза",
         "Forecast end (date or number; blank: a third of the history):" => "Окончание прогноза (дата или число; пусто: треть истории):",
-        "Forecast start (a date or number in the history; blank: after the last point):" => "Начало прогноза (дата или номер в истории; пусто: после последней точки):",
+        "Forecast start (a date or number in the history; blank: after the last point):" => {
+            "Начало прогноза (дата или номер в истории; пусто: после последней точки):"
+        }
         "Format Cells" => "Форматирование ячеек",
         "Format Cells|Fill" => "Наполнять",
         "Format Chart Area…" => "Форматировать область диаграммы…",
@@ -730,7 +748,9 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Group by Years" => "Группировать по годам",
         "Grouped By:" => "Сгруппировано по:",
         "Growth" => "Рост",
-        "Header (&L left, &C center, &R right; &P page, &N pages, &D date, &A sheet):" => "Заголовок (&L слева, &C в центре, &R справа; &P страница, &N страниц, &D дата, &A лист):",
+        "Header (&L left, &C center, &R right; &P page, &N pages, &D date, &A sheet):" => {
+            "Заголовок (&L слева, &C в центре, &R справа; &P страница, &N страниц, &D дата, &A лист):"
+        }
         "Header (in):" => "Заголовок (в):",
         "Heading 1" => "Заголовок 1",
         "Heading 2" => "Заголовок 2",
@@ -856,7 +876,9 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "No Fill" => "Нет заполнения",
         "No names defined" => "Имена не определены",
         "No picture selected" => "Изображение не выбрано",
-        "No printers found. Configure a system printer or export a PDF." => "Принтеры не найдены. Настройте системный принтер или экспортируйте PDF-файл.",
+        "No printers found. Configure a system printer or export a PDF." => {
+            "Принтеры не найдены. Настройте системный принтер или экспортируйте PDF-файл."
+        }
         "No ranges yet." => "Диапазонов пока нет.",
         "None" => "Никто",
         "Normal Probability" => "Нормальная вероятность",
@@ -920,7 +942,9 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Protect Sheet" => "Защитить лист",
         "Protect Structure and Windows" => "Защитите структуру и окна",
         "Protect Workbook structure" => "Защитить структуру книги",
-        "Protect workbook for: Structure (sheets can't be added, moved, renamed, hidden or deleted)." => "Защитите книгу по следующим параметрам: Структура (листы нельзя добавлять, перемещать, переименовывать, скрывать или удалять).",
+        "Protect workbook for: Structure (sheets can't be added, moved, renamed, hidden or deleted)." => {
+            "Защитите книгу по следующим параметрам: Структура (листы нельзя добавлять, перемещать, переименовывать, скрывать или удалять)."
+        }
         "Protection" => "Защита",
         "Purple" => "Фиолетовый",
         "Quarterly Sales Dashboard" => "Ежеквартальная панель продаж",

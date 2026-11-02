@@ -9,7 +9,7 @@
 //! gridcraft-cli run [--in FILE | --sample NAME] [--cmd 'id={json}']... [--script FILE.jsonl] [--out FILE] [--print RANGE] [--quiet]
 //! gridcraft-cli commands [--json] [--search X]
 //! gridcraft-cli functions [--json] [--search X] [--category C]
-//! gridcraft-cli mcp [--connect PORT] [--in FILE | --sample NAME]
+//! gridcraft-cli mcp [--connect PORT [--launch APP]] [--in FILE | --sample NAME]
 //! gridcraft-cli send <port> <method> [json]
 //! gridcraft-cli version | --version
 //! ```
@@ -47,7 +47,7 @@ const USAGE: &str = "usage:
                      blank lines and lines starting with # or // are skipped
   gridcraft-cli commands [--json] [--search X]
   gridcraft-cli functions [--json] [--search X] [--category C]
-  gridcraft-cli mcp [--connect PORT] [--in FILE | --sample NAME]
+  gridcraft-cli mcp [--connect PORT [--launch APP]] [--in FILE | --sample NAME]
   gridcraft-cli send <port> <method> [json]
   gridcraft-cli version";
 
@@ -523,18 +523,39 @@ fn functions(args: &[String]) -> Result<(), String> {
 }
 
 /// `mcp` (headless, in-process engine) or `mcp --connect PORT|HOST:PORT` (drive a running app
-/// started with `gridcraft --control PORT`). JSON-RPC on stdin/stdout; logs on stderr.
+/// started with `gridcraft --control PORT`). `--launch APP` starts the desktop app on demand.
+/// JSON-RPC on stdin/stdout; logs on stderr.
 fn mcp(args: &[String]) -> Result<(), String> {
     use gridcraft_mcp::{Backend, Headless, Remote, Server, control_addr};
-    let a = Args::parse(args, &["connect", "in", "sample"], &[])?;
+    let a = Args::parse(args, &["connect", "launch", "in", "sample"], &[])?;
     a.no_extra(0)?;
+    if a.opt("launch").is_some() && a.opt("connect").is_none() {
+        return Err("--launch requires --connect".into());
+    }
     let backend: Box<dyn Backend> = match a.opt("connect") {
         Some(c) => {
             let addr = control_addr(c);
-            Box::new(
-                Remote::connect(&addr)
-                    .map_err(|e| format!("cannot connect to the GridCraft app at {addr}: {e} (start it with `gridcraft --control PORT`)"))?,
-            )
+            let remote = match Remote::connect(&addr) {
+                Ok(remote) => remote,
+                Err(first_error) => {
+                    let app = a.opt("launch").ok_or_else(|| {
+                        format!("cannot connect to the GridCraft app at {addr}: {first_error} (start it with `gridcraft --control PORT`)")
+                    })?;
+                    launch_app(app, c)?;
+                    let mut connected = None;
+                    for _ in 0..60 {
+                        match Remote::connect(&addr) {
+                            Ok(remote) => {
+                                connected = Some(remote);
+                                break;
+                            }
+                            Err(_) => std::thread::sleep(std::time::Duration::from_millis(250)),
+                        }
+                    }
+                    connected.ok_or_else(|| format!("the GridCraft app did not open its control channel at {addr}: {first_error}"))?
+                }
+            };
+            Box::new(remote)
         }
         None => {
             let session = match (a.opt("in"), a.opt("sample")) {
@@ -553,6 +574,17 @@ fn mcp(args: &[String]) -> Result<(), String> {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     Server::new(backend).serve(stdin.lock(), stdout.lock()).map_err(|e| e.to_string())
+}
+
+fn launch_app(app: &str, port: &str) -> Result<(), String> {
+    std::process::Command::new(app)
+        .args(["--control", port])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("cannot start GridCraft app `{app}`: {e}"))
 }
 
 /// `send PORT METHOD [JSON]`: one control-channel request to a running app.

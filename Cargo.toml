@@ -8,7 +8,7 @@ version = "0.14.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.95"
-repository = "https://github.com/storytold/gridcraft"
+repository = "https://github.com/igor04091968/gridcraft"
 
 [workspace.dependencies]
 # internal
@@ -33,6 +33,7 @@ craft-update = { git = "https://github.com/storytold/craft-libs", rev = "c5a1cbf
 thiserror = "2"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
+toml = "1"
 log = "0.4"
 # All date/time conversion goes through chrono (no hand-rolled calendar code beyond the 400-year range extension; AGENTS.md).
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
