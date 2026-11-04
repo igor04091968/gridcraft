@@ -12,5 +12,13 @@ workspace = true
 gridcraft-engine = { workspace = true }
 gridcraft-mcp = { workspace = true }
 serde_json = { workspace = true }
+serde = { workspace = true }
+getrandom = "0.4"
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+rustls-pemfile = "2"
+httparse = "1"
 tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
 ureq = { version = "3", default-features = false, features = ["json", "rustls"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+rcgen = "0.14"

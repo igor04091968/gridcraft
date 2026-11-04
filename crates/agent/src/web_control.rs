@@ -8,6 +8,11 @@ use tungstenite::{Message, WebSocket};
 const MAX_LINE: u64 = 64 * 1024 * 1024;
 
 pub fn main(args: &[String]) -> Result<(), String> {
+    if let [option, path] = args
+        && option == "--config"
+    {
+        return crate::remote::main(std::path::Path::new(path));
+    }
     let mut listen = "127.0.0.1:8780".to_string();
     let mut port = "7979".to_string();
     let mut token = std::env::var("GRIDCRAFT_CONTROL_TOKEN").ok();
@@ -49,6 +54,7 @@ pub fn serve(ws: TcpListener, tcp: TcpListener, token: String) -> Result<(), Str
 }
 
 fn serve_browser(stream: TcpStream, tcp: &TcpListener, token: &str) -> Result<(), String> {
+    let local = stream.peer_addr().is_ok_and(|address| address.ip().is_loopback());
     stream.set_read_timeout(Some(std::time::Duration::from_secs(10))).map_err(|e| e.to_string())?;
     let mut ws = tungstenite::accept(stream).map_err(|e| e.to_string())?;
     authenticate_ws(&mut ws, token)?;
@@ -72,12 +78,21 @@ fn serve_browser(stream: TcpStream, tcp: &TcpListener, token: &str) -> Result<()
                 Ok(Message::Text(text)) => {
                     let request: Value = serde_json::from_str(&text).map_err(|e| format!("invalid browser request: {e}"))?;
                     ws.get_ref().set_read_timeout(None).map_err(|e| e.to_string())?;
-                    let handled = crate::web_agent::handle(&mut ws, &request);
+                    let handled = if local && request.get("method").and_then(Value::as_str).is_some_and(|m| m.starts_with("server.")) {
+                        let result = crate::remote::handle_local(request["method"].as_str().unwrap_or(""), &request["params"]);
+                        let response = match result {
+                            Ok(result) => json!({"id":request.get("id"),"result":result}),
+                            Err(error) => json!({"id":request.get("id"),"error":{"message":error}}),
+                        };
+                        ws.send(Message::text(response.to_string())).map(|_| true).map_err(|e| e.to_string())
+                    } else {
+                        crate::web_agent::handle(&mut ws, &request)
+                    };
                     ws.get_ref().set_read_timeout(Some(std::time::Duration::from_millis(100))).map_err(|e| e.to_string())?;
                     handled?;
                 }
                 Ok(_) => {}
-                Err(tungstenite::Error::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
                 Err(e) => return Err(e.to_string()),
             },
             Err(e) => return Err(e.to_string()),
@@ -86,7 +101,7 @@ fn serve_browser(stream: TcpStream, tcp: &TcpListener, token: &str) -> Result<()
     }
 }
 
-fn authenticate_ws(ws: &mut WebSocket<TcpStream>, token: &str) -> Result<(), String> {
+pub(crate) fn authenticate_ws<S: std::io::Read + Write>(ws: &mut WebSocket<S>, token: &str) -> Result<(), String> {
     let reply = match ws.read() {
         Ok(Message::Text(line)) => control_auth::check_first_line(&line, token),
         Ok(_) => Err(json!({"ok": false, "error": "authentication required"})),

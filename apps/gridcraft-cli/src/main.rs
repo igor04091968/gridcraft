@@ -50,6 +50,7 @@ const USAGE: &str = "usage:
   gridcraft-cli functions [--json] [--search X] [--category C]
   gridcraft-cli mcp [--connect PORT [--launch APP]] [--in FILE | --sample NAME]
   gridcraft-cli web-control [--listen HOST:PORT] [--port PORT] [--token TOKEN]
+  gridcraft-cli web-control --config /absolute/path/to/remote.json (built-in HTTPS/WSS)
   gridcraft-cli send <port> <method> [json]
   gridcraft-cli version";
 

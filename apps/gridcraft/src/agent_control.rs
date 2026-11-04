@@ -27,6 +27,9 @@ pub struct AgentBridge {
 
 impl AgentBridge {
     pub fn start_default(ctx: egui::Context) -> Result<Self, String> {
+        if let Err(error) = gridcraft_agent::remote::autostart() {
+            log::warn!("remote HTTPS server did not start: {error}");
+        }
         if std::env::var_os("GRIDCRAFT_AGENT_USE_CONTROL_SERVER").is_some() {
             return Self::start_on(configured_token()?, SocketAddr::from(([127, 0, 0, 1], 8780)), ctx).map_err(|e| e.to_string());
         }

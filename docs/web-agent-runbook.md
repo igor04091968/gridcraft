@@ -1,6 +1,6 @@
 # Web agent runbook
 
-> **Last updated:** 2026-11-04 · **Change:** minor (Pollinations settings in desktop/web; shared native backend; guarded actions)
+> **Last updated:** 2026-11-05 · **Change:** minor (built-in HTTPS/WSS hosting and browser reconnect; Pollinations settings; guarded actions)
 
 ## Scope
 
@@ -21,7 +21,7 @@ For browser use, build gridcraft-cli and the web distribution. Set GRIDCRAFT_CON
 - DeepSeek (PlusVibe): free model deepseek-v4-flash-0731:free; set GRIDCRAFT_AGENT_PLUSVIBE_API_KEY. Optional server-side endpoint override: GRIDCRAFT_AGENT_PLUSVIBE_BASE_URL; default https://plusvibeapi.ru/v1. The account's available models and free quota are controlled by PlusVibe.
 - Pollinations: default model alias `openai`; configure the key and model in the panel as described below.
 
-The key must come from the provider's API platform. ChatGPT/Codex and Kimi Code subscriptions are separate from their API billing. For OpenAI, Kimi and PlusVibe, keys and endpoint overrides belong in the server service environment. Pollinations also supports a private settings file configured from the panel; the browser sends a new key only over the authenticated connection and never stores it locally. Keep the legacy GRIDCRAFT_AGENT_API_KEY, GRIDCRAFT_AGENT_BASE_URL, and GRIDCRAFT_AGENT_MODEL variables for existing OpenAI-compatible local services that call agent.run without a provider. Restart the control service after changing its environment. Use WSS through a trusted reverse proxy when the browser is not on the same host.
+The key must come from the provider's API platform. ChatGPT/Codex and Kimi Code subscriptions are separate from their API billing. For OpenAI, Kimi and PlusVibe, keys and endpoint overrides belong in the server service environment. Pollinations also supports a private settings file configured from the panel; the browser sends a new key only over the authenticated connection and never stores it locally. Keep the legacy GRIDCRAFT_AGENT_API_KEY, GRIDCRAFT_AGENT_BASE_URL, and GRIDCRAFT_AGENT_MODEL variables for existing OpenAI-compatible local services that call agent.run without a provider. Restart the control service after changing its environment. For remote browsers, use the [built-in HTTPS/WSS server](wss-hosting.md) or a trusted TLS reverse proxy.
 
 In **Automate → AI Agent**, connect through **Подключение веб-интерфейса**, choose a model, enter a task and run it. Legacy `?control=ws://127.0.0.1:8780&controlToken=...` URLs remain supported; the token grants workbook control, so do not publish URLs containing it. The initial response is a proposal. Review the command and arguments, then Apply or Undo. Nothing writes before Apply.
 
@@ -42,7 +42,7 @@ The same panel works on desktop and the web app. In the web panel, expand
 **Подключиться**. The token is cleared from the input and is not persisted; URLs with query
 parameters remain supported for existing deployments. Desktop starts the backend itself;
 the web app still requires `gridcraft-cli web-control` and its authenticated WebSocket.
-Remote browsers must use WSS through a trusted reverse proxy.
+Remote browsers must use WSS, either through the built-in server or a trusted reverse proxy.
 
 Settings live in `agent.json` in the user settings directory: `$XDG_CONFIG_HOME/gridcraft`
 (or `~/.config/gridcraft`) on Linux/BSD, `~/Library/Application Support/GridCraft` on macOS,
@@ -85,5 +85,6 @@ Stop `gridcraft-web-control.service` to disconnect both agent and MCP. Remove `c
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-04 | minor | Built-in HTTPS/WSS hosting with owner-only desktop management; bounded concurrent browser sessions; heartbeat/reconnect without replay |
 | 2026-11-04 | minor | Pollinations key/model setup, catalog, connection check and removal in shared desktop/web panel; private backend settings and built-in desktop backend |
 | 2026-11-04 | minor | Bind proposals to workbook context; agent Undo identifies its own history step; validation errors preserve the WebSocket connection |

@@ -4,6 +4,7 @@ use serde_json::{Value as Json, json};
 
 use crate::SheetApp;
 
+mod remote;
 mod review;
 
 #[derive(Default)]
@@ -23,6 +24,7 @@ pub struct AgentUi {
     pub connection_status: String,
     pub control_url: String,
     pub control_token_input: String,
+    remote: remote::RemoteUi,
     web_connected: bool,
     settings_requested: bool,
     next_id: u64,
@@ -49,6 +51,10 @@ impl AgentUi {
 
     pub fn reset_connection(&mut self) {
         self.web_connected = false;
+        if !self.pending.is_empty() {
+            self.log
+                .push("Связь прервалась во время запроса. Проверьте книгу перед повторной отправкой; запросы автоматически не повторяются.".into());
+        }
         self.pending.clear();
         self.settings_requested = false;
         self.proposal = None;
@@ -77,13 +83,17 @@ impl SheetApp {
                 self.agent.status = error.to_string();
                 self.agent.log.push(format!("Error: {error}"));
             } else if let Some(result) = response.get("result") {
-                if result.get("bridgeConnected") == Some(&Json::Bool(true)) {
+                if result.get("remoteServer") == Some(&Json::Bool(true)) || result.get("pairingToken").is_some() {
+                    self.agent.remote.receive(result);
+                    self.agent.status = "Настройки удалённого доступа обновлены.".into();
+                } else if result.get("bridgeConnected") == Some(&Json::Bool(true)) {
                     self.agent.web_connected = true;
                     self.agent.settings_requested = false;
                     self.agent.status = "Веб-интерфейс подключён к агенту.".into();
                 } else if result.get("bridgeDisconnected") == Some(&Json::Bool(true)) {
                     self.agent.reset_connection();
-                    self.agent.status = "Соединение с сервером агента закрыто. Подключитесь заново.".into();
+                    self.agent.status =
+                        "Соединение прервано. Отправленные команды не повторяются; подключение восстанавливается автоматически.".into();
                 } else if result.get("provider").and_then(Json::as_str) == Some("pollinations")
                     && result.get("configured").and_then(Json::as_bool).is_some()
                     && self.agent.provider == "pollinations"
@@ -151,6 +161,9 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
     let mut open = app.agent.open;
     egui::Window::new("AI-агент").id(egui::Id::unique("gridcraft-agent")).open(&mut open).resizable(true).default_width(480.0).show(ctx, |ui| {
         ui.label("Изменения агента требуют подтверждения");
+        if app.services.agent_connect.is_none() && app.services.agent_send.is_some() {
+            remote::show(app, ui);
+        }
         if app.services.agent_connect.is_some() {
             egui::CollapsingHeader::new("Подключение веб-интерфейса").default_open(app.services.agent_send.is_none()).show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -167,6 +180,13 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                         connect(app.agent.control_url.clone(), token);
                         app.agent.status = "Подключение…".into();
                     }
+                }
+                if ui.button("Отключиться").clicked() {
+                    if let Some(connect) = &app.services.agent_connect {
+                        connect(String::new(), String::new());
+                    }
+                    app.agent.reset_connection();
+                    app.agent.status = "Отключено.".into();
                 }
                 ui.small("Для локального сервера используйте ws://127.0.0.1:8780; для удалённого — wss://.");
             });
@@ -267,6 +287,9 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         });
     });
     app.agent.open = open;
+    if !open {
+        app.agent.remote.hide_token();
+    }
 }
 
 fn valid_model(model: &str) -> bool {

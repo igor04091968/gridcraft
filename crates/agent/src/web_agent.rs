@@ -1,3 +1,5 @@
+use std::io::{Read, Write};
+#[cfg(test)]
 use std::net::TcpStream;
 use std::time::Duration;
 
@@ -6,7 +8,7 @@ use tungstenite::{Message, WebSocket};
 
 mod settings;
 
-pub fn handle(ws: &mut WebSocket<TcpStream>, request: &Value) -> Result<bool, String> {
+pub fn handle<S: Read + Write>(ws: &mut WebSocket<S>, request: &Value) -> Result<bool, String> {
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
     if !matches!(method, "agent.run" | "agent.apply" | "agent.undo" | "agent.settings" | "agent.configure" | "agent.models" | "agent.test") {
         return Ok(false);
@@ -28,7 +30,7 @@ pub fn handle(ws: &mut WebSocket<TcpStream>, request: &Value) -> Result<bool, St
     Ok(true)
 }
 
-fn apply(ws: &mut WebSocket<TcpStream>, mut action: Value) -> Result<Value, String> {
+fn apply<S: Read + Write>(ws: &mut WebSocket<S>, mut action: Value) -> Result<Value, String> {
     validate_action(&json!({"action": action}))?;
     required(&action, "command")?;
     if !action.get("context").is_some_and(Value::is_object) {
@@ -46,7 +48,7 @@ fn required<'a>(params: &'a Value, key: &str) -> Result<&'a str, String> {
     params.get(key).and_then(Value::as_str).filter(|v| !v.trim().is_empty()).ok_or_else(|| format!("missing `{key}`"))
 }
 
-fn propose(ws: &mut WebSocket<TcpStream>, params: &Value) -> Result<Value, String> {
+fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Value, String> {
     let task = required(params, "task")?;
     if task.len() > 16_000 {
         return Err("task is too long (16000 characters maximum)".into());
@@ -196,14 +198,22 @@ fn validate_action(proposal: &Value) -> Result<(), String> {
     Ok(())
 }
 
-fn call_browser(ws: &mut WebSocket<TcpStream>, id: u64, method: &str, params: Value) -> Result<Value, String> {
+#[allow(clippy::disallowed_methods)] // Native-only backend; the bounded wait never executes on WASM.
+fn call_browser<S: Read + Write>(ws: &mut WebSocket<S>, id: u64, method: &str, params: Value) -> Result<Value, String> {
     let request = json!({"id": id, "method": method, "params": params});
     ws.send(Message::text(request.to_string())).map_err(|e| e.to_string())?;
-    loop {
+    let deadline = std::time::Instant::now() + Duration::from_secs(110);
+    for _ in 0..256 {
+        if std::time::Instant::now() >= deadline {
+            return Err("Browser reply timed out.".into());
+        }
         match ws.read() {
             Ok(Message::Text(text)) => {
                 let response: Value = serde_json::from_str(&text).map_err(|e| format!("invalid browser response: {e}"))?;
                 if response.get("id").and_then(Value::as_u64) != Some(id) {
+                    if response.get("method").is_some() {
+                        ws.send(Message::text(json!({"id":response.get("id"),"error":{"code":-32000,"message":"Agent is busy; wait for the current request to finish."}}).to_string())).map_err(|e| e.to_string())?;
+                    }
                     continue;
                 }
                 if response.get("ok") == Some(&Value::Bool(true)) {
@@ -217,6 +227,7 @@ fn call_browser(ws: &mut WebSocket<TcpStream>, id: u64, method: &str, params: Va
             Err(e) => return Err(e.to_string()),
         }
     }
+    Err("Too many unrelated messages while waiting for the browser.".into())
 }
 
 #[cfg(test)]

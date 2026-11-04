@@ -106,11 +106,18 @@ pub fn start() {
                         queued.push((url, token));
                         connection_ctx.request_repaint();
                     }));
-                    let control = match (query_param("control"), query_param("controlToken")) {
-                        (Some(url), Some(token)) => crate::control_web::BrowserControl::connect(&url, &token, cc.egui_ctx.clone(), &mut app),
+                    if let Some(url) = crate::control_web::default_url() {
+                        app.agent.control_url = url;
+                    }
+                    let connection_plan = match (query_param("control"), query_param("controlToken")) {
+                        (Some(url), Some(token)) => Some(crate::control_web::ConnectionPlan::new(url, token)),
                         _ => None,
                     };
-                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, prefs, control, agent_connections }))
+                    remove_legacy_token_from_url();
+                    let control = connection_plan
+                        .as_ref()
+                        .and_then(|plan| crate::control_web::BrowserControl::connect(&plan.url, &plan.token, cc.egui_ctx.clone(), &mut app));
+                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, prefs, control, agent_connections, connection_plan }))
                 }),
             )
             .await;
@@ -134,6 +141,25 @@ fn query_param(key: &str) -> Option<String> {
     web_sys::UrlSearchParams::new_with_str(&query()).ok()?.get(key)
 }
 
+fn remove_legacy_token_from_url() {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(href) = window.location().href() else {
+        return;
+    };
+    let Ok(url) = web_sys::Url::new(&href) else {
+        return;
+    };
+    let params = url.search_params();
+    if params.has("controlToken") {
+        params.delete("controlToken");
+        if let Ok(history) = window.history() {
+            let _ = history.replace_state_with_url(&JsValue::NULL, "", Some(&url.href()));
+        }
+    }
+}
+
 struct WebShell {
     app: SheetApp,
     inbox: Inbox,
@@ -141,6 +167,7 @@ struct WebShell {
     prefs: crate::prefs::PrefsSync,
     control: Option<crate::control_web::BrowserControl>,
     agent_connections: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
+    connection_plan: Option<crate::control_web::ConnectionPlan>,
 }
 
 fn local_storage() -> Option<web_sys::Storage> {
@@ -162,7 +189,20 @@ impl eframe::App for WebShell {
             self.app.services.agent_send = None;
             self.app.services.agent_inbox = None;
             self.app.agent.reset_connection();
-            self.control = crate::control_web::BrowserControl::connect(&url, &token, ctx.clone(), &mut self.app);
+            if url.is_empty() && token.is_empty() {
+                self.connection_plan = None;
+            } else {
+                self.control = crate::control_web::BrowserControl::connect(&url, &token, ctx.clone(), &mut self.app);
+                self.connection_plan = self.control.as_ref().map(|_| crate::control_web::ConnectionPlan::new(url, token));
+            }
+        }
+        if let Some(plan) = &mut self.connection_plan
+            && !plan.update(&mut self.control, &mut self.app, ctx)
+        {
+            self.connection_plan = None;
+            if let Some(control) = self.control.take() {
+                control.close();
+            }
         }
         let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
         for f in dropped {

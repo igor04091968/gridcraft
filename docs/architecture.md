@@ -1,6 +1,6 @@
 # Architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-04 · **Change:** minor (shared native agent backend and Pollinations connection settings) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-05 · **Change:** minor (built-in HTTPS/WSS server, isolated browser channels and reconnection; shared native agent backend and Pollinations connection settings) · **Target:** Microsoft Excel (Microsoft 365)
 
 How GridCraft is built today. Rules for contributors are in [`AGENTS.md`](../AGENTS.md).
 
@@ -153,6 +153,13 @@ macros as chunked hidden names (`_gc_macro_<n>_<k>`: macro `n`, chunk `k`).
   saved in a private `agent.json`, with only non-secret status returned to the UI. Desktop starts
   an in-process backend on private ephemeral loopback ports; web uses the CLI-hosted backend. See [web-agent-runbook.md](web-agent-runbook.md).
 
+The optional native remote host (`crates/agent/src/remote.rs`) serves static WASM assets and
+`/agent/ws` on one rustls HTTPS listener. Each authenticated browser has a separate workbook
+RPC channel; the remote endpoint exposes agent methods only. Server management and pairing
+are confined to the private desktop/loopback bridge. This is a single-owner service, not a
+multi-user tenant system. Certificates are reloaded on new TLS handshakes; browser reconnect
+never replays sent RPCs. See [WSS hosting](wss-hosting.md).
+
 ## Platforms and builds
 
 macOS universal, Windows x64/x86/arm64, Linux x86_64/aarch64/riscv64 (AppImage, Flatpak, deb,
@@ -170,6 +177,7 @@ rpm, tarball), FreeBSD, and web (WASM; WebGPU or WebGL2). Release workflows in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-04 | minor | built-in HTTPS/WSS server, isolated browser channels and reconnection; see [WSS hosting](wss-hosting.md) |
 | 2026-11-04 | minor | L6 agent backend shared by desktop and CLI; Pollinations connection settings stored privately; browser keeps only selection |
 | 2026-11-04 | minor | Shared native/WASM context checks and guarded agent Undo |
 | 2026-10-25 | trivial | The hidden names that hold macros are `_gc_macro_<n>_<k>` |
