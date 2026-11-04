@@ -5,6 +5,7 @@ type OpenUrl = Box<dyn Fn(&str)>;
 type CopyHtml = Box<dyn FnMut(&str, &str) -> Result<(), String>>;
 type Download = Box<dyn Fn(&str, &[u8])>;
 type PrintPdf = Box<dyn Fn(&[u8])>;
+type AgentConnect = Box<dyn Fn(String, String)>;
 
 /// Host services the platform shell provides (file pickers, opening URLs).
 #[derive(Default)]
@@ -36,6 +37,12 @@ pub struct Services {
     pub download: Option<Download>,
     /// Web: start an asynchronous file pick; the bytes arrive later in `inbox`.
     pub open_async: Option<Box<dyn Fn()>>,
+    /// Send an agent request to the native backend or authenticated browser control channel.
+    pub agent_send: Option<Box<dyn Fn(serde_json::Value)>>,
+    /// Browser: connect to a control server chosen in the panel; token is never persisted.
+    pub agent_connect: Option<AgentConnect>,
+    /// Agent JSON-RPC responses delivered on the next UI frame.
+    pub agent_inbox: Option<InboxJson>,
     /// Files delivered asynchronously (name, bytes), opened on the next frame.
     pub inbox: Option<Inbox>,
     /// Web: hand PDF bytes to the browser's print flow directly (no download,
@@ -45,6 +52,7 @@ pub struct Services {
 
 /// Shared queue of files read asynchronously (browser file picker, drag and drop).
 pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
+pub type InboxJson = std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>;
 
 /// Which parts of the app's own window chrome are drawn. Everything is on by default; a host
 /// that embeds the sheet in its own window (and owns files itself) can turn off the title bar

@@ -75,6 +75,9 @@ pub(super) fn automate(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("commandSearch", json!({}));
     }
+    if big_button(ui, Icon::Script, "AI\nAgent", "Ask the agent about this workbook", false).clicked() {
+        app.agent.open = !app.agent.open;
+    }
     let __k = big_button(ui, Icon::Script, "Agent\nControl", "How agents drive GridCraft (MCP / control channel)", false);
     control_keytip(app, ui, &__k, "agents");
     if __k.clicked() {

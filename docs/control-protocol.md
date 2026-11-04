@@ -1,5 +1,7 @@
 # GridCraft control protocol
 
+> **Last updated:** 2026-11-04 · **Change:** minor (reviewed agent snapshot, Apply and Undo)
+
 Start the desktop app with a control port:
 
 ```sh
@@ -48,6 +50,12 @@ bytes that aren't UTF-8, a line over 64 MiB) gets one error reply and the server
 connection; nothing sent after it runs. Blank lines are skipped.
 
 ## Methods
+
+The in-app agent bridge also uses `agent.snapshot {range?}` (returns `context`, `workbook`,
+`range`), `agent.applyReviewed {command, params, context}` and `agent.undoReviewed {}`.
+Apply requires the unchanged context from the snapshot; Undo requires that the last applied
+agent action is still the latest edit in the active document. They run the checks and command
+in one UI pass; failures return an ordinary control error. See [web-agent-runbook.md](web-agent-runbook.md).
 
 | Method | Params | What it does |
 |---|---|---|
@@ -141,3 +149,9 @@ rejected without changing earlier settings. `ui.printSubmit` explicitly submits 
 print-ready PDF without opening a dialog; inspect `ui.printSettings` until `busy` becomes false
 and check `status`/`detail`. The browser keeps its own print hook. PDF export remains separate.
 GridCraft accepts the existing `file.print` sheet/pagination params on `ui.printSubmit`; the engine `file.print` command returns the PDF without spooling.
+
+## Revision history
+
+| Date | Change | Summary |
+|---|---|---|
+| 2026-11-04 | minor | Document shared native/WASM reviewed-agent methods and stale-context/history errors |

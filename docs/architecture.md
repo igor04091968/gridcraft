@@ -1,6 +1,6 @@
 # Architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-25 · **Change:** trivial (the hidden names that hold macros; earlier: macro engine on the engine building blocks) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-04 · **Change:** minor (shared native agent backend and Pollinations connection settings) · **Target:** Microsoft Excel (Microsoft 365)
 
 How GridCraft is built today. Rules for contributors are in [`AGENTS.md`](../AGENTS.md).
 
@@ -23,6 +23,7 @@ including tests, 2026-10-10.
 | L3 | `chart` | ~2.9k | Toolkit-free chart layout to drawing primitives, a rasterizer, sparklines |
 | L5 | `engine` | ~17.7k | `Session`: open workbooks, selection, history (COW snapshots), clipboard, fill, sort, filter, PivotTables, what-if, print, file I/O (`io.rs`), and the command registry (`cmd/*`, 313 commands) with the Excel ribbon catalog (`catalog.rs`) |
 | L6 | `ui-egui` | ~11.6k | Excel-style UI (title bar, QAT, ribbon, formula bar, virtualised grid, editor, tabs, status bar, dialogs, task panes, chart view) and the control channel |
+| L6 | `agent` | — | Provider calls, private Pollinations settings and authenticated workbook transport; native only, shared by desktop and CLI |
 | L6 | `mcp` | ~1.4k | MCP server over stdio (hand-written JSON-RPC), headless or bridged to a running app |
 | L7 | `apps/gridcraft`, `apps/gridcraft-cli`, `apps/gridcraft-web` | ~2.2k | Desktop (eframe/wgpu), CLI (`info`, `convert`, `eval`, `cat`, `run`, `commands`, `functions`, `mcp`, `send`), web (WASM via trunk) |
 | — | `xtask` | — | `ci`, `parity`, `assets`, `layers`, `wasm`, `version`, `stats` |
@@ -142,6 +143,16 @@ macros as chunked hidden names (`_gc_macro_<n>_<k>`: macro `n`, chunk `k`).
 - MCP: `gridcraft-cli mcp`, headless or `--connect` to a running app, see [`mcp.md`](mcp.md).
 - CLI: [`cli.md`](cli.md).
 
+- Reviewed in-app agent actions: `ui-egui/src/agent/review.rs` captures workbook data and a
+  context (document UID, revision, window, sheet and selection) in one control request.
+  `agent.applyReviewed` checks it and calls `app.run` in the same UI pass.
+  `agent.undoReviewed` checks the applied revision and the top history snapshot before calling
+  `edit.undo`. The shared agent backend (`crates/agent`) attaches the original context to the model's proposal and
+  forwards these guarded methods; the native bridge admits the same methods. API credentials
+  stay in the native backend. Pollinations keys can be configured through the panel and are
+  saved in a private `agent.json`, with only non-secret status returned to the UI. Desktop starts
+  an in-process backend on private ephemeral loopback ports; web uses the CLI-hosted backend. See [web-agent-runbook.md](web-agent-runbook.md).
+
 ## Platforms and builds
 
 macOS universal, Windows x64/x86/arm64, Linux x86_64/aarch64/riscv64 (AppImage, Flatpak, deb,
@@ -159,6 +170,8 @@ rpm, tarball), FreeBSD, and web (WASM; WebGPU or WebGL2). Release workflows in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-04 | minor | L6 agent backend shared by desktop and CLI; Pollinations connection settings stored privately; browser keeps only selection |
+| 2026-11-04 | minor | Shared native/WASM context checks and guarded agent Undo |
 | 2026-10-25 | trivial | The hidden names that hold macros are `_gc_macro_<n>_<k>` |
 | 2026-10-24 | minor | Macro engine on the building blocks (`macros/`, `cmd/macros.rs`) |
 | 2026-10-24 | minor | Engine building blocks for multi-command actions: undo groups, recording buffer, document trust, chunked hidden-name storage |

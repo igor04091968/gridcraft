@@ -175,6 +175,9 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
     let s = |k: &str| p.get(k).and_then(Json::as_str);
     let f = |k: &str| p.get(k).and_then(Json::as_f64).unwrap_or(0.0) as f32;
     let out = match method {
+        "agent.snapshot" => wrap(app.agent_snapshot(p)),
+        "agent.applyReviewed" => wrap(app.agent_apply_reviewed(p)),
+        "agent.undoReviewed" => wrap(app.agent_undo_reviewed()),
         "engine.execute" | "command" | "ui.menu.invoke" => {
             let Some(id) = s("command").or(s("id")) else { return err("missing `command`") };
             let params = p.get("params").cloned().unwrap_or(json!({}));
@@ -425,22 +428,26 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
 
 /// Drains queued control requests, drops requests whose client stopped waiting, handles immediate outcomes and admits screenshots, then requests a repaint while synthetic input remains.
 pub fn poll(app: &mut SheetApp, ctx: &egui::Context) {
-    let Some(rx) = app.control_rx.take() else { return };
-    while let Ok(req) = rx.try_recv() {
-        // A request whose sender stopped waiting is dropped unrun: running it would apply a
-        // command the client was told had failed, and its reply would go nowhere (#1914).
-        if !req.take() {
-            continue;
-        }
-        let outcome = handle(app, ctx, &req.method, &req.params);
-        match outcome {
-            Outcome::Done(v) => {
-                let _ = req.reply.send(v);
+    let control_rx = app.control_rx.take();
+    let agent_control_rx = app.agent_control_rx.take();
+    for rx in [control_rx.as_ref(), agent_control_rx.as_ref()].into_iter().flatten() {
+        while let Ok(req) = rx.try_recv() {
+            // A request whose sender stopped waiting is dropped unrun: running it would apply a
+            // command the client was told had failed, and its reply would go nowhere (#1914).
+            if !req.take() {
+                continue;
             }
-            Outcome::Screenshot { path } => admit(app, ctx, path, req.reply),
+            let outcome = handle(app, ctx, &req.method, &req.params);
+            match outcome {
+                Outcome::Done(v) => {
+                    let _ = req.reply.send(v);
+                }
+                Outcome::Screenshot { path } => admit(app, ctx, path, req.reply),
+            }
         }
     }
-    app.control_rx = Some(rx);
+    app.control_rx = control_rx;
+    app.agent_control_rx = agent_control_rx;
     if !app.synthetic.is_empty() {
         ctx.request_repaint();
     }

@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (pinned XLSX corpus, metadata and in-cell picture type fixes; AutoSum over a selected row puts its total to the right, and fills a selection's empty last row and column; earlier: macro engine and `macro.*` commands; macro interface on the Automate tab) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (Pollinations connection settings and shared native backend; AI proposals bound to workbook context; guarded agent Undo; pinned 78-file external XLSX corpus, metadata fixes: round-trip differing 26 → 0; AutoSum over a selected row puts its total to the right, and fills a selection's empty last row and column; earlier: macro engine and `macro.*` commands; macro interface on the Automate tab) · **Target:** Microsoft Excel (Microsoft 365)
 
 GridCraft aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -67,7 +67,7 @@ collaboration, mobile, AI).
 | Hardware (multi-core calc, GPU, pen, multi-window) | ~40% | 25–40 | [hardware-parity.md](docs/hardware-parity.md) |
 | Platforms | ~80% (no iOS/Android; ahead on Linux, BSD, RISC-V) | 30–60 | [target-app-parity.md](docs/target-app-parity.md#platforms) |
 | Ecosystem / add-ins | ~10% (VBA out of scope; own scripts, MCP, CLI) | 25–40 | [target-app-parity.md](docs/target-app-parity.md#ecosystem-and-ai) |
-| AI features | ~15% (agent control strong; no in-app assistant) | 30–50 | [target-app-parity.md](docs/target-app-parity.md#ecosystem-and-ai) |
+| AI features | ~15% (earlier estimate; reviewed in-app panel in working tree, score not remeasured) | 30–50 | [target-app-parity.md](docs/target-app-parity.md#ecosystem-and-ai) |
 | **Total** | **~50%** | **~700–1,100** | |
 
 ## Features
@@ -135,7 +135,8 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
-| 2026-11-04 | Pinned external XLSX corpus: 78 files, 76 open, 283/284 cached results match; metadata and in-cell picture type fixes reduce round-trip differences from 26 to 0. Business corpus and Excel verification remain. See [report](docs/xlsx-corpus-2026-11-04.md). |
+| 2026-11-04 | Pinned 78-file XLSX run: in-cell picture rich-value types fix removes the last two round-trip differences; one cached VLOOKUP mismatch and Excel verification remain |
+| 2026-11-04 | AI proposals keep their document, revision, window, sheet and selection; Apply rejects stale context, and agent Undo checks its own latest history step before changing the workbook |
 | 2026-10-25 | AutoSum over a selection does what Excel does: a selected row gets one total to its right (in its last cell if that is empty), not a one-cell total under each cell; a block whose last column is empty gets each row's total there, one whose last row is empty each column's, and with both the corner gets the total of the block; otherwise totals go under each column as before |
 | 2026-10-24 | Macro interface ([macros.md](docs/macros.md#in-the-window)): an Automate › Macros group (Record Macro, which turns into Stop Recording, Use Relative References, Run Macro with recent macros); "Recording · N steps" with Stop in the status bar; a Record Macro dialog (checked name, free Ctrl+Shift shortcut, description); the Macros dialog lists macros beside Automate scripts and a VBA project, with Run, Step Into, Edit, Create, Delete and Options; Ctrl+Shift+letter macro shortcuts; questions that offer Run, Overwrite, Shift Down or Shift Right; a step editor with a breakpoint gutter, drag to reorder, a command picker, reference boxes that switch between relative tokens and absolute references, Inputs and Output tabs, a debug bar (Check, Run, Step, Continue, Run to Here, Stop with keep or undo) and grid overlays for inputs, writes, conflicts and the current step |
 | 2026-10-24 | Go To lists the named ranges of every sheet (`Sheet2!Name` for a name scoped to another sheet; hidden names, constants and formulas left out) and the references entered before, a double-click goes to an entry, and the Reference box takes several names or references separated by commas (`Price, Type`, `B14:C22,F19:G30`) |
@@ -245,7 +246,9 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-11-04 | minor | Pinned 78-file XLSX corpus: preserve metadata and in-cell picture types; zero round-trip differences, one cached VLOOKUP mismatch; Excel verification remains |
+| 2026-11-04 | minor | Pollinations connection settings, model catalog, key removal and auth check in desktop/web panel; built-in native backend; no readiness score change |
+| 2026-11-04 | minor | In-cell picture rich-value types verified on all 78 pinned XLSX: round-trip differences 2 → 0; cached VLOOKUP mismatch and Excel verification remain |
+| 2026-11-04 | minor | Reviewed AI Apply rejects stale workbook context; agent Undo preserves later manual work |
 | 2026-10-25 | minor | Progress log: AutoSum over a selected row, and a selection's empty last row and column |
 | 2026-10-24 | minor | Macro interface on the Automate tab; progress log row |
 | 2026-10-24 | minor | Macro engine and `macro.*` commands; catalog 275 / 291 → 276 / 292 (View › Macros › Record Macro); progress log row |
@@ -300,3 +303,5 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 | 2026-10-10 | minor | Checked against the alpha gate (six core workflows pass): stays alpha |
 | 2026-10-10 | major | Re-measured against Excel for Mac 16.113.4: stage alpha, breadth ~75%, ready ~50%, ~160–240 h to beta, ~700–1,100 h to full parity; progress docs restructured; detail moved to `docs/` |
 | 2026-10-07 | major | First estimates: catalog 89%, functions ~93%, depth ~65%, ~35 h to alpha, ~215 h to full parity |
+
+2026-11-04: [Pinned external XLSX corpus](docs/xlsx-corpus-2026-11-04.md): 78 files, 76 open, 283/284 cached results match; metadata fixes reduce round-trip-differing files from 26 to 2. Representative business corpus and Excel-side verification remain.

@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p gridcraft-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] out.png`
+//!  [--dialog 'name={json}'] [--agent-provider pollinations] [--hf-edit header|footer] out.png`
 
 use gridcraft_engine::Session;
 use gridcraft_ui_egui::SheetApp;
@@ -22,6 +22,7 @@ fn main() {
     let mut dialog: Option<String> = None;
     let mut language: Option<String> = None;
     let mut hf_edit: Option<String> = None;
+    let mut agent_provider: Option<String> = None;
     let mut out = "snapshot.png".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -67,6 +68,10 @@ fn main() {
                 i += 1;
                 dialog = args.get(i).cloned();
             }
+            "--agent-provider" => {
+                i += 1;
+                agent_provider = args.get(i).cloned();
+            }
             "--hf-edit" => {
                 i += 1;
                 hf_edit = args.get(i).cloned();
@@ -106,6 +111,10 @@ fn main() {
             {
                 let mut app = SheetApp::new(session, Default::default());
                 app.ui.dark = dark;
+                if let Some(provider) = &agent_provider {
+                    app.agent.open = true;
+                    app.agent.restore_preferences(&json!({"provider": provider, "model": "openai"}));
+                }
                 if let Some(code) = &language
                     && let Some(l) = gridcraft_ui_egui::i18n::Language::parse(code)
                 {

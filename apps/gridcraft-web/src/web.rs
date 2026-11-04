@@ -85,9 +85,10 @@ pub fn start() {
                     }
                     // Preferences from an earlier visit (#1562), as the desktop app reads `ui.json`
                     // and `prefs.json`; a saved language replaces the browser's.
-                    let (stored_ui, stored_prefs) = (stored(crate::prefs::UI_KEY), stored(crate::prefs::PREFS_KEY));
-                    crate::prefs::restore(&mut app, stored_ui.as_deref(), stored_prefs.as_deref());
-                    let mut prefs = crate::prefs::PrefsSync::new(stored_ui, stored_prefs);
+                    let (stored_ui, stored_prefs, stored_agent) =
+                        (stored(crate::prefs::UI_KEY), stored(crate::prefs::PREFS_KEY), stored(crate::prefs::AGENT_KEY));
+                    crate::prefs::restore(&mut app, stored_ui.as_deref(), stored_prefs.as_deref(), stored_agent.as_deref());
+                    let mut prefs = crate::prefs::PrefsSync::new(stored_ui, stored_prefs, stored_agent);
                     SheetApp::setup_context_for_language(&cc.egui_ctx, false, app.ui.language);
                     if let Some(bridge) = &app_bridge {
                         prefs.keep_user_name(app.session.prefs.user_name.clone());
@@ -96,7 +97,20 @@ pub fn start() {
                         }
                         bridge.post_ready();
                     }
-                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, prefs }))
+                    let agent_connections = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+                    let connection_sink = std::sync::Arc::clone(&agent_connections);
+                    let connection_ctx = cc.egui_ctx.clone();
+                    app.services.agent_connect = Some(Box::new(move |url, token| {
+                        let mut queued = connection_sink.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                        queued.clear();
+                        queued.push((url, token));
+                        connection_ctx.request_repaint();
+                    }));
+                    let control = match (query_param("control"), query_param("controlToken")) {
+                        (Some(url), Some(token)) => crate::control_web::BrowserControl::connect(&url, &token, cc.egui_ctx.clone(), &mut app),
+                        _ => None,
+                    };
+                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, prefs, control, agent_connections }))
                 }),
             )
             .await;
@@ -125,6 +139,8 @@ struct WebShell {
     inbox: Inbox,
     bridge: Option<crate::host::Bridge>,
     prefs: crate::prefs::PrefsSync,
+    control: Option<crate::control_web::BrowserControl>,
+    agent_connections: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
 }
 
 fn local_storage() -> Option<web_sys::Storage> {
@@ -138,6 +154,16 @@ fn stored(key: &str) -> Option<String> {
 
 impl eframe::App for WebShell {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let connections = std::mem::take(&mut *self.agent_connections.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
+        for (url, token) in connections {
+            if let Some(control) = self.control.take() {
+                control.close();
+            }
+            self.app.services.agent_send = None;
+            self.app.services.agent_inbox = None;
+            self.app.agent.reset_connection();
+            self.control = crate::control_web::BrowserControl::connect(&url, &token, ctx.clone(), &mut self.app);
+        }
         let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
         for f in dropped {
             let inbox = self.inbox.clone();
@@ -153,7 +179,13 @@ impl eframe::App for WebShell {
                 }
             });
         }
+        if let Some(control) = &mut self.control {
+            control.queue();
+        }
         self.app.logic(ctx);
+        if let Some(control) = &mut self.control {
+            control.reply();
+        }
         // Store changed preferences straight away: a reload or closed tab runs no exit code (#1562).
         let changed = self.prefs.changed(&self.app);
         if !changed.is_empty() {

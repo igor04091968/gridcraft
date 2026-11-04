@@ -1,6 +1,6 @@
 # Gaps
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (pinned XLSX corpus, metadata and in-cell picture type fixes; §8: PivotTable Enable show details; earlier: PivotTable Show Details) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (Pollinations connection settings and shared native backend; reviewed agent context/Undo guards; pinned external XLSX corpus: 78 files, round-trip differing 26 → 0; §8: PivotTable Enable show details; earlier: PivotTable Show Details) · **Target:** Microsoft Excel (Microsoft 365)
 
 Every known shortfall against Excel, one entry each, ranked by user impact (what blocks someone
 using GridCraft for real work first). This is the work list: pick from the top, check the open
@@ -171,9 +171,20 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 - VBA out of scope (dropped on open, #6); no Office Scripts compatibility; no plugin or custom
   function API. **Estimate:** 25–40 h plus an owner decision.
 
-### 22. AI features (F)
-- No in-app assistant, natural-language formulas or Analyze Data; agent control via MCP is
-  already strong. **Estimate:** 30–50 h; model choice needs the owner.
+### 22. AI features (F, S)
+
+- The in-app panel proposes one command from one server-side model call. Apply checks
+  the original document UID, revision, window, sheet and selection; agent Undo checks its own
+  latest history snapshot and refuses to undo later manual work.
+- Pollinations now has in-app key/model settings, catalog refresh, credential check and key removal
+  for desktop and web, using private native/server storage. Desktop starts its own backend.
+- Native and browser UI checks pass save/remove, an inert proposal, Apply/Undo and preference
+  reload with an isolated model response; the official catalog and invalid-key error are verified.
+- Missing: request cancellation, a real multi-step loop, generation with a real provider key
+  and connection-loss scenarios. See [web-agent-runbook.md](web-agent-runbook.md) and
+  [verification](pollinations-agent-2026-11-04.md). No readiness score change is inferred.
+
+- Analyze Data remains missing. The earlier 30–50 h estimate has not been remeasured.
 
 ### 23. Mobile (platform)
 - No iOS, iPadOS or Android layout. **Estimate:** 30–60 h.
@@ -186,7 +197,10 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-11-04 | minor | Pinned 78-file XLSX corpus: preserve metadata and in-cell picture types; zero round-trip differences, one cached VLOOKUP mismatch; Excel verification remains |
+| 2026-11-04 | minor | Pollinations connection settings, model catalog, key removal and auth check in desktop/web panel; built-in native backend; no readiness score change |
+| 2026-11-04 | minor | In-cell picture rich-value types verified on all 78 pinned XLSX: round-trip differences 2 → 0; cached VLOOKUP mismatch and Excel verification remain |
+| 2026-11-04 | minor | §22: reviewed agent Apply/Undo guards; cancellation, multi-step and full E2E remain |
+| 2026-11-04 | minor | Pinned external Calamine corpus: 78 files, round-trip differing 26 → 0 after metadata fixes; representative business corpus and Excel verification remain |
 | 2026-10-24 | minor | §8: PivotTable Enable show details: `pivot.options` `enableShowDetails` turns Show Details off for a PivotTable, read and written in XLSX as `enableDrill` |
 | 2026-10-23 | minor | §8: PivotTable Show Details: double-clicking a value cell lists its source records on a new sheet (#2364) |
 | 2026-10-22 | minor | §20: a native window per workbook window, New Window on the same workbook and Arrange All on the desktop; left: Arrange All across monitors, the web's one window, pen pressure (estimate 10–14 h → 5–8 h) |

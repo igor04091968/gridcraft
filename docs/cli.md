@@ -31,6 +31,7 @@ cargo install --path apps/gridcraft-cli     # or: cargo run -p gridcraft-cli -- 
 | `commands [--json] [--search X]` | `gridcraft-cli commands --search border` — every command with its parameter docs. |
 | `functions [--json] [--search X] [--category C]` | `gridcraft-cli functions --search lookup` |
 | `mcp [--connect PORT [--launch APP]] [--in FILE \| --sample NAME]` | MCP server on stdio; `--launch` starts the desktop app on demand ([mcp.md](mcp.md)). |
+| `web-control [--listen HOST:PORT] [--port PORT]` | Authenticated WebSocket-to-control bridge for the active browser workbook and review-based AI agent; see [web-agent-runbook.md](web-agent-runbook.md). |
 | `send <port> <method> [json]` | `gridcraft-cli send 7979 engine.execute '{"command":"home.bold","params":{"range":"A1:C1"}}'` — one control-channel request to a running app (`gridcraft --control 7979`). |
 | `version` | Prints `gridcraft-cli <version>`. |
 
@@ -92,11 +93,11 @@ up by *signature*, `expected type → actual type` (e.g. `number → #SPILL!`), 
 part has a content type, every content-type override and internal relationship target exists, relationship ids are
 unique: what Excel would "repair"), compared with the source (no kind of relationship it had, such as `xmlMaps`, is
 missing; a calculation chain doesn't count, Excel rebuilds it, nor do a link to a place in the workbook and a
-relationship to an empty part, such as a comments part without comments) and read back. Categories compared: `package`, `sheets` (names and order),
+relationship to an empty part, such as a comments part without comments) and read back. Categories compared: `docProps` (standard document metadata), `package`, `sheets` (names and order),
 `values`, `formulas`, `numFmts` (per cell), `merges`, `names`, `tables` (name, range, columns), `condFormats` (rules
 per sheet), `validations`, `charts` (kinds and series counts), `comments`, `hyperlinks`, `pivots`. `#SPILL!`/`#CALC!`
 compare equal to `#VALUE!` and `#CIRC!` to 0, as that's what the file format stores.
-unique: what Excel would "repair") and read back. Categories compared: `package`, `sheets` (names and order),
+unique: what Excel would "repair") and read back. Categories compared: `docProps` (standard document metadata), `package`, `sheets` (names and order),
 `values`, `formulas`, `numFmts` (per cell), `merges`, `names`, `tables` (name, range, columns), `condFormats` (each
 sheet's rules in priority order, priority numbers aside), `validations`, `charts` (kinds and series counts), `comments`,
 `hyperlinks`, `pivots`. `#SPILL!`/`#CALC!` compare equal to `#VALUE!` and `#CIRC!` to 0, as
@@ -149,3 +150,5 @@ added, a changed meaning bumps the version):
 
 Values use the same JSON shapes as `eval --json`: numbers, strings, booleans, `null` (empty) and
 `{"error": "#N/A"}`. Mismatch lists are capped by `--max-report`; the counts are not.
+
+Pinned external XLSX corpus and replay instructions: [2026-11-04 report](xlsx-corpus-2026-11-04.md).

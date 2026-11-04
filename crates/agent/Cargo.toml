@@ -1,0 +1,16 @@
+[package]
+name = "gridcraft-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native agent providers, private connection settings and authenticated workbook bridge"
+
+[lints]
+workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+gridcraft-engine = { workspace = true }
+gridcraft-mcp = { workspace = true }
+serde_json = { workspace = true }
+tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+ureq = { version = "3", default-features = false, features = ["json", "rustls"] }

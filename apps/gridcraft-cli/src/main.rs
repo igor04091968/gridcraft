@@ -30,6 +30,7 @@ macro_rules! outln {
 }
 
 mod check;
+use gridcraft_agent::web_control;
 
 use gridcraft_engine::Session;
 use serde_json::{Value, json};
@@ -48,6 +49,7 @@ const USAGE: &str = "usage:
   gridcraft-cli commands [--json] [--search X]
   gridcraft-cli functions [--json] [--search X] [--category C]
   gridcraft-cli mcp [--connect PORT [--launch APP]] [--in FILE | --sample NAME]
+  gridcraft-cli web-control [--listen HOST:PORT] [--port PORT] [--token TOKEN]
   gridcraft-cli send <port> <method> [json]
   gridcraft-cli version";
 
@@ -82,6 +84,7 @@ fn main() -> ExitCode {
         Some("commands") => commands(rest),
         Some("functions") => functions(rest),
         Some("mcp") => mcp(rest),
+        Some("web-control") => web_control::main(rest),
         Some("send") => send(rest),
         Some(other) => Err(format!("unknown subcommand `{other}`\n{USAGE}")),
         None => Err(USAGE.to_string()),

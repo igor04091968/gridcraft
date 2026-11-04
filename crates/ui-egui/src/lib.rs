@@ -16,6 +16,7 @@ pub const UPDATE_APP: craft_update::app::App = craft_update::app::App {
     ..craft_update::suite::GRIDCRAFT
 };
 
+pub mod agent;
 pub mod backstage;
 mod border_preview;
 mod cell_pictures;
@@ -217,6 +218,7 @@ pub struct SheetApp {
     /// Dismissible info bar under the ribbon (open-time notices).
     pub notice: Option<Notice>,
     pub services: Services,
+    pub agent: agent::AgentUi,
     pub printing: printing::State,
     print_feedback_seen: Option<printing::Feedback>,
     /// Synthetic input from agents, one batch per step (drags need several steps).
@@ -230,6 +232,8 @@ pub struct SheetApp {
     /// without reaching input handling, so the hook must offer the same step again.
     pub(crate) synthetic_injected_at_pass: Option<u64>,
     pub control_rx: Option<std::sync::mpsc::Receiver<ControlRequest>>,
+    /// Requests from the native AI bridge, routed through the same workbook command handler.
+    pub agent_control_rx: Option<std::sync::mpsc::Receiver<ControlRequest>>,
     pub grid: grid::GridState,
     pub perf: Perf,
     pub fonts_ready: bool,

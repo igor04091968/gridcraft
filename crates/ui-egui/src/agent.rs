@@ -1,0 +1,491 @@
+use std::collections::HashSet;
+
+use serde_json::{Value as Json, json};
+
+use crate::SheetApp;
+
+mod review;
+
+#[derive(Default)]
+pub struct AgentUi {
+    pub open: bool,
+    pub task: String,
+    pub provider: String,
+    pub model: String,
+    pub range: String,
+    pub max_steps: u32,
+    pub status: String,
+    pub proposal: Option<Json>,
+    pub log: Vec<String>,
+    pub api_key_input: String,
+    pub models: Vec<String>,
+    pub configured: bool,
+    pub connection_status: String,
+    pub control_url: String,
+    pub control_token_input: String,
+    web_connected: bool,
+    settings_requested: bool,
+    next_id: u64,
+    pending: HashSet<String>,
+    last_applied: Option<review::AppliedAction>,
+}
+
+impl AgentUi {
+    /// Non-secret preferences shared by desktop and browser persistence.
+    pub fn preferences(&self) -> Json {
+        json!({"provider":self.provider, "model":self.model})
+    }
+
+    pub fn restore_preferences(&mut self, value: &Json) {
+        if let Some(provider) = value.get("provider").and_then(Json::as_str)
+            && matches!(provider, "openai" | "kimi" | "deepseek" | "pollinations")
+        {
+            self.provider = provider.into();
+        }
+        if let Some(model) = value.get("model").and_then(Json::as_str).filter(|model| valid_model(model)) {
+            self.model = model.into();
+        }
+    }
+
+    pub fn reset_connection(&mut self) {
+        self.web_connected = false;
+        self.pending.clear();
+        self.settings_requested = false;
+        self.proposal = None;
+        self.configured = false;
+        self.connection_status.clear();
+    }
+
+    pub fn new() -> Self {
+        Self { provider: "openai".into(), model: "gpt-6.1-sol".into(), max_steps: 4, control_url: "ws://127.0.0.1:8780".into(), ..Default::default() }
+    }
+}
+
+impl SheetApp {
+    pub fn poll_agent(&mut self) {
+        let responses = self
+            .services
+            .agent_inbox
+            .as_ref()
+            .map(|inbox| std::mem::take(&mut *inbox.lock().unwrap_or_else(std::sync::PoisonError::into_inner)))
+            .unwrap_or_default();
+        for response in responses {
+            if let Some(id) = response.get("id").and_then(Json::as_str) {
+                self.agent.pending.remove(id);
+            }
+            if let Some(error) = response.pointer("/error/message").and_then(Json::as_str) {
+                self.agent.status = error.to_string();
+                self.agent.log.push(format!("Error: {error}"));
+            } else if let Some(result) = response.get("result") {
+                if result.get("bridgeConnected") == Some(&Json::Bool(true)) {
+                    self.agent.web_connected = true;
+                    self.agent.settings_requested = false;
+                    self.agent.status = "Веб-интерфейс подключён к агенту.".into();
+                } else if result.get("bridgeDisconnected") == Some(&Json::Bool(true)) {
+                    self.agent.reset_connection();
+                    self.agent.status = "Соединение с сервером агента закрыто. Подключитесь заново.".into();
+                } else if result.get("provider").and_then(Json::as_str) == Some("pollinations")
+                    && result.get("configured").and_then(Json::as_bool).is_some()
+                    && self.agent.provider == "pollinations"
+                {
+                    self.agent.configured = result.get("configured").and_then(Json::as_bool).unwrap_or(false);
+                    if let Some(model) = result.get("model").and_then(Json::as_str).filter(|model| valid_model(model)) {
+                        self.agent.model = model.into();
+                    }
+                    self.agent.connection_status =
+                        if self.agent.configured { "Ключ настроен." } else { "Введите API-ключ Pollinations." }.into();
+                    self.agent.status = self.agent.connection_status.clone();
+                } else if let Some(models) = result.get("models").and_then(Json::as_array) {
+                    self.agent.models = models
+                        .iter()
+                        .filter_map(|model| model.get("name").and_then(Json::as_str).filter(|name| valid_model(name)).map(str::to_string))
+                        .take(1000)
+                        .collect();
+                    self.agent.status = "Список моделей обновлён.".into();
+                } else if result.get("connectionVerified") == Some(&Json::Bool(true)) {
+                    self.agent.connection_status = if result.get("usingDraftKey") == Some(&Json::Bool(true)) {
+                        "Ключ проверен. Сохраните настройки, чтобы использовать его."
+                    } else {
+                        "Подключение к Pollinations проверено."
+                    }
+                    .into();
+                    self.agent.status = self.agent.connection_status.clone();
+                } else if let Some(proposal) = result.get("proposal") {
+                    self.agent.proposal = Some(proposal.clone());
+                    self.agent.status = "Review the proposal. Nothing has changed.".into();
+                } else {
+                    self.agent.status = "Command completed.".into();
+                    self.agent.log.push("Command completed.".into());
+                }
+            }
+        }
+    }
+
+    fn agent_send(&mut self, method: &str, params: Json) {
+        self.agent.next_id = self.agent.next_id.saturating_add(1);
+        let id = format!("agent-{}", self.agent.next_id);
+        let request = json!({"id": id, "method": method, "params": params});
+        if let Some(send) = &self.services.agent_send {
+            self.agent.pending.insert(id);
+            send(request);
+            self.agent.status = "Working…".into();
+        } else {
+            self.agent.status = "Подключение агента недоступно. Проверьте запуск локальной службы или подключение веб-интерфейса.".into();
+        }
+    }
+}
+
+pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
+    if !app.agent.open {
+        return;
+    }
+    if app.agent.provider == "pollinations"
+        && !app.agent.settings_requested
+        && app.services.agent_send.is_some()
+        && (app.services.agent_connect.is_none() || app.agent.web_connected)
+    {
+        app.agent.settings_requested = true;
+        app.agent_send("agent.settings", json!({"provider":"pollinations"}));
+        app.agent_send("agent.models", json!({"provider":"pollinations"}));
+    }
+    let mut open = app.agent.open;
+    egui::Window::new("AI-агент").id(egui::Id::unique("gridcraft-agent")).open(&mut open).resizable(true).default_width(480.0).show(ctx, |ui| {
+        ui.label("Изменения агента требуют подтверждения");
+        if app.services.agent_connect.is_some() {
+            egui::CollapsingHeader::new("Подключение веб-интерфейса").default_open(app.services.agent_send.is_none()).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let label = ui.label("Адрес сервера");
+                    ui.text_edit_singleline(&mut app.agent.control_url).labelled_by(label.id);
+                });
+                ui.horizontal(|ui| {
+                    let label = ui.label("Токен подключения");
+                    ui.add(egui::TextEdit::singleline(&mut app.agent.control_token_input).password(true)).labelled_by(label.id);
+                });
+                if ui.button("Подключиться").clicked() {
+                    let token = std::mem::take(&mut app.agent.control_token_input);
+                    if let Some(connect) = &app.services.agent_connect {
+                        connect(app.agent.control_url.clone(), token);
+                        app.agent.status = "Подключение…".into();
+                    }
+                }
+                ui.small("Для локального сервера используйте ws://127.0.0.1:8780; для удалённого — wss://.");
+            });
+        }
+        ui.add_space(8.0);
+        let mut provider_changed = false;
+        ui.horizontal(|ui| {
+            let label = ui.label("Провайдер");
+            craft_ui::ComboBox::from_id_salt("gridcraft-agent-provider")
+                .selected_text(match app.agent.provider.as_str() {
+                    "kimi" => "Kimi",
+                    "deepseek" => "DeepSeek (PlusVibe)",
+                    "pollinations" => "Pollinations",
+                    _ => "Codex (OpenAI API)",
+                })
+                .show_ui(ui, |ui| {
+                    provider_changed |= ui.selectable_value(&mut app.agent.provider, "openai".into(), "Codex (OpenAI API)").changed();
+                    provider_changed |= ui.selectable_value(&mut app.agent.provider, "kimi".into(), "Kimi").changed();
+                    provider_changed |= ui.selectable_value(&mut app.agent.provider, "deepseek".into(), "DeepSeek (PlusVibe)").changed();
+                    provider_changed |= ui.selectable_value(&mut app.agent.provider, "pollinations".into(), "Pollinations").changed();
+                })
+                .response
+                .labelled_by(label.id);
+        });
+        if provider_changed {
+            app.agent.settings_requested = false;
+            app.agent.api_key_input.clear();
+            app.agent.models.clear();
+            app.agent.connection_status.clear();
+            app.agent.proposal = None;
+            app.agent.model = match app.agent.provider.as_str() {
+                "kimi" => "kimi-k3.1-pro".into(),
+                "deepseek" => "deepseek-v4-flash-0731:free".into(),
+                "pollinations" => "openai".into(),
+                _ => "gpt-6.1-sol".into(),
+            };
+        }
+        ui.horizontal(|ui| {
+            let label = ui.label("Модель");
+            ui.text_edit_singleline(&mut app.agent.model).labelled_by(label.id);
+            ui.add(egui::DragValue::new(&mut app.agent.max_steps).range(1..=20).prefix("Лимит шагов "));
+        });
+        if app.agent.provider == "pollinations" {
+            show_pollinations_settings(app, ui);
+        } else {
+            ui.small(match app.agent.provider.as_str() {
+                "kimi" => "Ключ на сервере: GRIDCRAFT_AGENT_KIMI_API_KEY",
+                "deepseek" => "PlusVibe API · ключ только на сервере: GRIDCRAFT_AGENT_PLUSVIBE_API_KEY",
+                _ => "Ключ на сервере: GRIDCRAFT_AGENT_OPENAI_API_KEY",
+            });
+        }
+        ui.horizontal(|ui| {
+            let label = ui.label("Диапазон (необязательно)");
+            ui.text_edit_singleline(&mut app.agent.range).labelled_by(label.id);
+        });
+        let label = ui.label("Задача");
+        ui.add(egui::TextEdit::multiline(&mut app.agent.task).desired_rows(5).desired_width(f32::INFINITY)).labelled_by(label.id);
+        if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Выполнить / предложить")).clicked() && !app.agent.task.trim().is_empty()
+        {
+            let task = app.agent.task.clone();
+            let provider = app.agent.provider.clone();
+            let model = app.agent.model.clone();
+            let range = app.agent.range.clone();
+            let max_steps = app.agent.max_steps;
+            app.agent.log.push(format!("Задача: {task}"));
+            app.agent_send("agent.run", json!({"task": task, "provider": provider, "model": model, "range": range, "maxSteps": max_steps}));
+        }
+        ui.separator();
+        ui.label(&app.agent.status);
+        if let Some(proposal) = app.agent.proposal.clone() {
+            if let Some(summary) = proposal.get("summary").and_then(Json::as_str) {
+                ui.label(summary);
+            }
+            if let Some(action) = proposal.get("action").filter(|v| !v.is_null()) {
+                ui.monospace(
+                    serde_json::to_string_pretty(&json!({"command": action.get("command"), "params": action.get("params")})).unwrap_or_default(),
+                );
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Применить")).clicked() {
+                        app.agent_send("agent.apply", action.clone());
+                        app.agent.proposal = None;
+                    }
+                    if ui.button("Отклонить").clicked() {
+                        app.agent.proposal = None;
+                        app.agent.status = "Предложение отклонено; ничего не изменено.".into();
+                    }
+                });
+            }
+        }
+        if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Отменить последнее изменение")).clicked() {
+            app.agent_send("agent.undo", json!({}));
+        }
+        ui.separator();
+        egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+            for line in &app.agent.log {
+                ui.label(line);
+            }
+        });
+    });
+    app.agent.open = open;
+}
+
+fn valid_model(model: &str) -> bool {
+    !model.trim().is_empty() && model.len() <= 128 && !model.chars().any(char::is_control)
+}
+
+fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Настройка Pollinations").default_open(true).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            let label = ui.label("API-ключ");
+            ui.add(egui::TextEdit::singleline(&mut app.agent.api_key_input).password(true).hint_text(if app.agent.configured {
+                "Ключ сохранён · оставьте пустым, чтобы сохранить его"
+            } else {
+                "Введите ключ Pollinations"
+            }))
+            .labelled_by(label.id);
+        });
+        ui.hyperlink_to("Получить API-ключ", "https://enter.pollinations.ai");
+        ui.small("Ключ сохраняется на стороне приложения или сервера. В браузере сохраняется только выбор модели.");
+        if !app.agent.models.is_empty() {
+            craft_ui::ComboBox::from_id_salt("pollinations-models").selected_text("Выбрать из каталога моделей").show_ui(ui, |ui| {
+                for name in &app.agent.models {
+                    ui.selectable_value(&mut app.agent.model, name.clone(), name);
+                }
+            });
+        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Сохранить настройки")).clicked() {
+                let key = std::mem::take(&mut app.agent.api_key_input);
+                app.agent_send("agent.configure", json!({"provider":"pollinations", "model":app.agent.model, "apiKey":key}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Проверить подключение")).clicked() {
+                app.agent_send("agent.test", json!({"provider":"pollinations", "apiKey":app.agent.api_key_input}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Обновить модели")).clicked() {
+                app.agent_send("agent.models", json!({"provider":"pollinations"}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Удалить сохранённый ключ")).clicked() {
+                app.agent.api_key_input.clear();
+                app.agent_send("agent.configure", json!({"provider":"pollinations", "clearKey":true}));
+            }
+        });
+        ui.label(&app.agent.connection_status);
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+    use crate::Services;
+
+    #[test]
+    fn panel_controls_have_accessible_names() {
+        let mut app = SheetApp::new(gridcraft_engine::Session::new(), Services::default());
+        app.agent.open = true;
+        // The harness's default accessibility check rejects any unnamed interactive control.
+        let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(800.0, 600.0)).build_ui_state(
+            |ui, app| {
+                let ctx = ui.ctx().clone();
+                show(app, &ctx);
+            },
+            app,
+        );
+        harness.run_steps(2);
+        assert!(harness.state().agent.open);
+    }
+
+    #[test]
+    fn pollinations_settings_ui_saves_and_removes_key_without_persisting_it_in_preferences() {
+        use egui_kittest::kittest::Queryable as _;
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&requests);
+        let inbox = Arc::new(Mutex::new(Vec::new()));
+        let response_sink = Arc::clone(&inbox);
+        let mut app = SheetApp::new(
+            gridcraft_engine::Session::new(),
+            Services {
+                agent_inbox: Some(Arc::clone(&inbox)),
+                agent_send: Some(Box::new(move |value| {
+                    response_sink
+                        .lock()
+                        .unwrap()
+                        .push(json!({"id":value["id"], "result":{"provider":"pollinations", "model":"openai", "configured":true}}));
+                    sink.lock().unwrap().push(value);
+                })),
+                ..Default::default()
+            },
+        );
+        app.agent.open = true;
+        app.agent.provider = "pollinations".into();
+        app.agent.model = "openai".into();
+        app.agent.api_key_input = "test-private-key".into();
+        let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(1000.0, 900.0)).build_ui_state(
+            |ui, app| {
+                app.poll_agent();
+                show(app, &ui.ctx().clone());
+            },
+            app,
+        );
+        harness.run_steps(3);
+        assert_eq!(requests.lock().unwrap()[0]["method"], "agent.settings");
+        harness.get_by_label("Сохранить настройки").click();
+        harness.run_steps(3);
+        let sent = requests.lock().unwrap();
+        let saved = sent.iter().find(|request| request["method"] == "agent.configure").unwrap();
+        assert_eq!(saved["params"]["apiKey"], "test-private-key");
+        drop(sent);
+        assert!(harness.state().agent.api_key_input.is_empty());
+        assert_eq!(harness.state().agent.preferences(), json!({"provider":"pollinations", "model":"openai"}));
+        harness.get_by_label("Удалить сохранённый ключ").click();
+        harness.run_steps(3);
+        assert!(requests.lock().unwrap().iter().any(|request| request["params"]["clearKey"] == true));
+    }
+
+    #[test]
+    fn pollinations_run_reply_keeps_settings_and_shows_proposal() {
+        let inbox = Arc::new(Mutex::new(Vec::new()));
+        let mut app = SheetApp::new(gridcraft_engine::Session::new(), Services { agent_inbox: Some(Arc::clone(&inbox)), ..Default::default() });
+        app.agent.provider = "pollinations".into();
+        app.agent.configured = true;
+        let proposal = json!({"summary":"Set A1", "action":{"command":"cell.set", "params":{"cell":"A1", "input":"42"}}});
+        inbox
+            .lock()
+            .unwrap()
+            .push(json!({"id":"agent-1", "result":{"provider":"pollinations", "model":"openai", "applied":false, "proposal":proposal}}));
+        app.poll_agent();
+        assert_eq!(app.agent.proposal, Some(proposal));
+        assert!(app.agent.configured);
+    }
+
+    #[test]
+    fn web_settings_wait_for_authentication_and_stop_after_disconnect() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&requests);
+        let inbox = Arc::new(Mutex::new(Vec::new()));
+        let mut app = SheetApp::new(
+            gridcraft_engine::Session::new(),
+            Services {
+                agent_inbox: Some(Arc::clone(&inbox)),
+                agent_connect: Some(Box::new(|_, _| {})),
+                agent_send: Some(Box::new(move |value| sink.lock().unwrap().push(value))),
+                ..Default::default()
+            },
+        );
+        app.agent.open = true;
+        app.agent.provider = "pollinations".into();
+        let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(1000.0, 900.0)).build_ui_state(
+            |ui, app| {
+                app.poll_agent();
+                show(app, &ui.ctx().clone());
+            },
+            app,
+        );
+        harness.run_steps(3);
+        assert!(requests.lock().unwrap().is_empty());
+        inbox.lock().unwrap().push(json!({"result":{"bridgeConnected":true}}));
+        harness.run_steps(3);
+        assert_eq!(requests.lock().unwrap().len(), 2);
+        inbox.lock().unwrap().push(json!({"result":{"bridgeDisconnected":true}}));
+        harness.run_steps(3);
+        assert_eq!(requests.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn pollinations_preferences_and_server_status_restore_without_credentials() {
+        let inbox = Arc::new(Mutex::new(Vec::new()));
+        let mut app = SheetApp::new(gridcraft_engine::Session::new(), Services { agent_inbox: Some(Arc::clone(&inbox)), ..Default::default() });
+        app.agent.restore_preferences(&json!({"provider":"pollinations", "model":"openai", "apiKey":"must-not-restore"}));
+        inbox.lock().unwrap().push(json!({"id":"agent-1", "result":{"provider":"pollinations", "model":"selected-model", "configured":true}}));
+        app.poll_agent();
+        assert_eq!(app.agent.model, "selected-model");
+        assert!(app.agent.configured);
+        assert!(app.agent.api_key_input.is_empty());
+        assert!(!app.agent.preferences().to_string().contains("apiKey"));
+    }
+
+    #[test]
+    fn starts_with_codex_api_settings() {
+        let agent = AgentUi::new();
+        assert_eq!(agent.provider, "openai");
+        assert_eq!(agent.model, "gpt-6.1-sol");
+    }
+
+    #[test]
+    fn proposal_is_inert_until_explicit_apply_and_can_be_undone() {
+        let inbox = Arc::new(Mutex::new(Vec::new()));
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let sent_from_ui = Arc::clone(&sent);
+        let mut app = SheetApp::new(
+            gridcraft_engine::Session::new(),
+            Services {
+                agent_inbox: Some(Arc::clone(&inbox)),
+                agent_send: Some(Box::new(move |value| sent_from_ui.lock().unwrap().push(value))),
+                ..Default::default()
+            },
+        );
+        let action = json!({"command": "cell.set", "params": {"cell": "A1", "input": "42"}});
+        inbox.lock().unwrap().push(json!({"id": "agent-1", "result": {"proposal": {"summary": "Set A1", "action": action}}}));
+        app.poll_agent();
+        assert!(sent.lock().unwrap().is_empty());
+        assert!(app.agent.proposal.is_some());
+
+        let action = app.agent.proposal.take().unwrap().get("action").cloned().unwrap();
+        app.agent_send("agent.apply", action);
+        app.agent_send("agent.undo", json!({}));
+        let requests = sent.lock().unwrap();
+        assert_eq!(requests[0]["method"], "agent.apply");
+        assert_eq!(requests[0]["params"]["command"], "cell.set");
+        assert_eq!(requests[1]["method"], "agent.undo");
+    }
+
+    #[test]
+    fn disconnected_panel_does_not_claim_to_have_sent_work() {
+        let mut app = SheetApp::new(gridcraft_engine::Session::new(), Services::default());
+        app.agent_send("agent.undo", json!({}));
+        assert!(app.agent.status.contains("недоступно"));
+    }
+}

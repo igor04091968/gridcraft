@@ -1,6 +1,6 @@
 # Target-app parity: GridCraft vs Microsoft Excel
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (pinned XLSX corpus, metadata and in-cell picture type fixes; automation: macro interface; earlier: catalog count 276 / 292, as `cargo xtask parity` measures; automation: typed macros in the engine; several windows: a native window per workbook window, New Window on the same workbook, Arrange All; no score change) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (Pollinations connection settings and shared native backend; reviewed in-app agent context/Undo guards; pinned external XLSX corpus: 78 files, round-trip differing 26 → 0; core metadata preserved; no score change; automation: macro interface; earlier: catalog count 276 / 292, as `cargo xtask parity` measures; automation: typed macros in the engine; several windows: a native window per workbook window, New Window on the same workbook, Arrange All; no score change) · **Target:** Microsoft Excel (Microsoft 365)
 
 This is the authoritative parity assessment. [`ROADMAP.md`](../ROADMAP.md) summarizes it,
 [`gaps.md`](gaps.md) lists every shortfall, and the area checklists hold the detail:
@@ -242,9 +242,12 @@ Linux, BSD and RISC-V, where Excel doesn't run.
   CLI that reach every command. VBA is out of scope (owner decision). A plugin or custom-function
   API (for example LAMBDA libraries and WASM custom functions) is the open-equivalent path: 25–40 h.
 - **AI:** Excel has Copilot, the COPILOT() function, Analyze Data, Python in Excel and Flash
-  Fill. GridCraft has Flash Fill and best-in-class agent control (any MCP client can drive every
-  command headless or live), but no in-app assistant, no natural-language formulas and no
-  Analyze Data. Local-model equivalents: 30–50 h; model choice needs the owner.
+  Fill. GridCraft has Flash Fill and agent control (any MCP client can drive every
+  command headless or live). The current working tree also has a server-backed in-app panel:
+  one model call, one reviewed command, workbook-context checks before Apply and a guarded
+  agent Undo. Full model/UI E2E, request cancellation and a multi-step loop remain unverified
+  or missing; there is no Analyze Data equivalent. These changes do not establish a new readiness score.
+  See [web-agent-runbook.md](web-agent-runbook.md).
 
 ## Stage
 
@@ -342,7 +345,10 @@ The inventory carried over from the 2026-10-07 ROADMAP.md, updated for what land
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-11-04 | minor | Pinned 78-file XLSX corpus: preserve metadata and in-cell picture types; zero round-trip differences, one cached VLOOKUP mismatch; Excel verification remains |
+| 2026-11-04 | minor | Pollinations connection settings, model catalog, key removal and auth check in desktop/web panel; built-in native backend; no readiness score change |
+| 2026-11-04 | minor | In-cell picture rich-value types verified on all 78 pinned XLSX: round-trip differences 2 → 0; cached VLOOKUP mismatch and Excel verification remain |
+| 2026-11-04 | minor | Describe in-app agent working-tree implementation and context/Undo guards; no score change |
+| 2026-11-04 | minor | Add reproducible external XLSX corpus evidence without changing estimated readiness scores |
 | 2026-10-25 | minor | Automation: macro interface (Automate › Macros, the Macros and Record Macro dialogs, the step editor, shortcuts) (no score change) |
 | 2026-10-25 | trivial | Catalog count 276 / 292 in the summary table and the method, as `cargo xtask parity` measures (no score change) |
 | 2026-10-22 | minor | Several windows on the desktop: a native window per workbook window, New Window on the same workbook, Switch Windows and Arrange All; "one window" removed from UI/UX fidelity, Hardware and the interaction-fidelity discount; no score change |

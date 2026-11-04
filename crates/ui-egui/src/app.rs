@@ -39,12 +39,14 @@ impl SheetApp {
             toast: None,
             notice: None,
             services,
+            agent: crate::agent::AgentUi::new(),
             printing: Default::default(),
             print_feedback_seen: None,
             synthetic: Default::default(),
             synthetic_pending: false,
             synthetic_injected_at_pass: None,
             control_rx: None,
+            agent_control_rx: None,
             grid: grid::GridState {
                 last_border: "bottom".into(),
                 last_fill: "#FFFF00".into(),
@@ -135,6 +137,7 @@ impl SheetApp {
         updates_ui::tick(self, ctx);
         // Files read asynchronously (web file picker, dropped files).
         self.poll_async_opens();
+        self.poll_agent();
         self.autosave(ctx);
         self.update_title(ctx);
         self.request_hidden_paint(ctx);
@@ -229,6 +232,7 @@ impl SheetApp {
             tabs::sheet_tabs(self, ui);
             pivot_pane::show(self, ui);
             panes::show(self, ui);
+            crate::agent::show(self, &ctx);
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.grid_bg)).show(ui, |ui| {
                 let g0 = now_ms();
                 grid::show(self, ui);

@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 gridcraft-engine = { workspace = true }
+gridcraft-agent = { workspace = true }
 gridcraft-ui-egui = { workspace = true }
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11", "clipboard"] }
 egui = { workspace = true }
@@ -35,6 +36,7 @@ craft-update = { workspace = true }
 rfd = { workspace = true }
 arboard = { workspace = true }
 gridcraft-mcp = { workspace = true }
+tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
 # The control channel's token (OS random numbers); already in the tree.
 getrandom = "0.4"
 

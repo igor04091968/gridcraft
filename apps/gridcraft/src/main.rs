@@ -9,6 +9,7 @@
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+mod agent_control;
 #[cfg(target_os = "macos")]
 mod apple_events;
 mod control_server;
@@ -118,6 +119,12 @@ fn load_prefs(app: &mut SheetApp) {
         app.ui = ui.at_startup();
         app.ui.language = language;
     }
+    if let Ok(b) = std::fs::read(dir.join("agent-ui.json"))
+        && b.len() <= 16 * 1024
+        && let Ok(value) = serde_json::from_slice::<serde_json::Value>(&b)
+    {
+        app.agent.restore_preferences(&value);
+    }
     if let Ok(b) = std::fs::read(dir.join("prefs.json"))
         && let Ok(p) = serde_json::from_slice(&b)
     {
@@ -131,6 +138,9 @@ fn save_prefs(app: &SheetApp) {
     }
     let Some(dir) = config_dir() else { return };
     let _ = std::fs::create_dir_all(&dir);
+    if let Ok(b) = serde_json::to_vec(&app.agent.preferences()) {
+        let _ = std::fs::write(dir.join("agent-ui.json"), b);
+    }
     if let Ok(b) = serde_json::to_vec_pretty(&app.ui) {
         let _ = std::fs::write(dir.join("ui.json"), b);
     }
@@ -386,6 +396,13 @@ fn main() -> eframe::Result<()> {
                     return Err("the app was already created".into());
                 };
                 SheetApp::setup_context_for_language(&cc.egui_ctx, app.ui.dark, app.ui.language);
+                match agent_control::AgentBridge::start_default(cc.egui_ctx.clone()) {
+                    Ok(bridge) => app.agent_control_rx = Some(bridge.install(&mut app.services)),
+                    Err(error) => {
+                        app.agent.status = format!("Подключение агента недоступно: {error}");
+                        log::warn!("native AI agent did not start: {error}");
+                    }
+                }
                 if let Some(port) = control_port {
                     match control_server::start(port, control_token.clone(), cc.egui_ctx.clone()) {
                         Ok(rx) => app.control_rx = Some(rx),

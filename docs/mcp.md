@@ -16,7 +16,7 @@ Two backends:
 
 Open **Automate → Agent Control (MCP)…**, select **Kimi Code** or **Codex**, choose **This project** or **All projects**, and click **Install integration**. GridCraft updates the selected client's MCP configuration, preserves other servers, and creates a `.bak` backup. Start a new agent session after installation; the agent launches GridCraft on demand. **Remove integration** removes only GridCraft's entry.
 
-Kimi uses `.kimi-code/mcp.json`; Codex uses `.codex/config.toml`. Project scope places these directories under the current working directory. Both `gridcraft` and `gridcraft-cli` must be installed in the same directory.
+Kimi uses `.kimi-code/mcp.json`; Codex uses `.codex/config.toml`. Project scope places these directories under the current working directory. Both the app and its CLI must be installed in the same directory (`gridcraft` with `gridcraft-cli`, or `solidcraft` with `solidcraft-cli`).
 
 ## Claude Code
 
@@ -41,6 +41,10 @@ JSON config (`.mcp.json`, Claude Desktop, other clients):
 
 Use `"args": ["mcp", "--connect", "7979"]` for the desktop app, or `["mcp", "--in", "/path/book.xlsx"]` to start
 with a file open.
+
+## Browser workbook and web agent
+
+`gridcraft-cli web-control` connects the authenticated MCP backend to the active browser workbook and provides the review-based web agent. Its setup, security restrictions, verification and recovery are in [web-agent-runbook.md](web-agent-runbook.md). The browser agent is separate from `execute_command`: its model response is only a proposal, and the user must explicitly apply the displayed command.
 
 ## Tools
 
