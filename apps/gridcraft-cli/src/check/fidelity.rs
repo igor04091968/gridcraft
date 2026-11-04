@@ -167,6 +167,10 @@ pub fn diff_workbooks(a: &Workbook, b: &Workbook, opts: &Options) -> Vec<Categor
             .collect()
     };
     diff_sets(&mut names, "workbook", &name_list(a), &name_list(b));
+    let mut props = Diffs::new("docProps", m);
+    if a.props != b.props {
+        props.push(|| "workbook: document properties changed".to_string());
+    }
     vec![
         sheets.done(),
         values.done(),
@@ -181,5 +185,6 @@ pub fn diff_workbooks(a: &Workbook, b: &Workbook, opts: &Options) -> Vec<Categor
         comments.done(),
         hyperlinks.done(),
         pivots.done(),
+        props.done(),
     ]
 }

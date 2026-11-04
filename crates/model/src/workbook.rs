@@ -88,6 +88,7 @@ pub struct DefinedName {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DocProps {
     pub title: String,
     pub subject: String,
@@ -95,6 +96,17 @@ pub struct DocProps {
     pub company: String,
     pub keywords: String,
     pub description: String,
+    pub last_modified_by: String,
+    /// Source timestamps are kept verbatim; saving does not invent a new modification time.
+    pub created: String,
+    pub modified: String,
+    pub last_printed: String,
+    pub revision: String,
+    pub language: String,
+    pub identifier: String,
+    pub category: String,
+    pub content_status: String,
+    pub version: String,
 }
 
 /// One phonetic (furigana) run of a string item (`<rPh>`): the reading `text` and the range of the
@@ -454,6 +466,15 @@ fn spell_calls(e: Expr, lambdas: &[String]) -> Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_json_properties_default_the_new_metadata_fields() -> Result<(), serde_json::Error> {
+        let props: DocProps =
+            serde_json::from_str(r#"{"title":"Old workbook","subject":"","author":"","company":"","keywords":"","description":""}"#)?;
+        assert_eq!(props.title, "Old workbook");
+        assert!(props.created.is_empty() && props.modified.is_empty() && props.revision.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn phonetics_are_additive_in_json() -> Result<(), Box<dyn std::error::Error>> {

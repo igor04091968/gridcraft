@@ -14,6 +14,7 @@ use crate::write::{NS_MAIN, NS_REL, Out, Rels, XML_DECL};
 use crate::xml::{self, El, esc};
 
 const NS_RICH: &str = "http://schemas.microsoft.com/office/spreadsheetml/2017/richdata";
+const NS_RICH_TYPES: &str = "http://schemas.microsoft.com/office/spreadsheetml/2017/richdata2";
 const NS_IMAGE_REL: &str = "http://schemas.microsoft.com/office/spreadsheetml/2022/richvaluerel";
 const RICH_EXT: &str = "{3E2802C4-A4D2-4D8B-9148-E3BE6C30E623}";
 const MAX_IMAGE: u64 = 16 * 1024 * 1024;
@@ -320,6 +321,12 @@ pub fn write(out: &mut Out, workbook_rels: &mut Rels) -> Result<(), IoError> {
             structures.into_bytes(),
         ),
         (
+            "rdRichValueTypes.xml",
+            "application/vnd.ms-excel.rdRichValueTypes+xml",
+            "http://schemas.microsoft.com/office/2017/06/relationships/rdRichValueTypes",
+            rich_value_types().into_bytes(),
+        ),
+        (
             "richValueRel.xml",
             "application/vnd.ms-excel.richvaluerel+xml",
             "http://schemas.microsoft.com/office/2022/10/relationships/richValueRel",
@@ -337,6 +344,32 @@ pub fn write(out: &mut Out, workbook_rels: &mut Rels) -> Result<(), IoError> {
     );
     workbook_rels.add("sheetMetadata", "metadata.xml");
     Ok(())
+}
+
+/// Global flags for built-in rich-value keys (MS-XLSX richdata2).
+/// Static pictures use the built-in `_localImage` type.
+fn rich_value_types() -> String {
+    let mut xml = format!("{XML_DECL}<rvTypesInfo xmlns=\"{NS_RICH_TYPES}\"><global><keyFlags>");
+    for name in [
+        "_Self",
+        "_DisplayString",
+        "_Flags",
+        "_Format",
+        "_SubLabel",
+        "_Attribution",
+        "_Icon",
+        "_Display",
+        "_CanonicalPropertyNames",
+        "_ClassificationId",
+    ] {
+        let _ = write!(xml, "<key name=\"{name}\">");
+        if name == "_Self" {
+            xml.push_str("<flag name=\"ExcludeFromFile\" value=\"1\"/>");
+        }
+        xml.push_str("<flag name=\"ExcludeFromCalcComparison\" value=\"1\"/></key>");
+    }
+    xml.push_str("</keyFlags></global></rvTypesInfo>");
+    xml
 }
 
 fn metadata(count: usize, dynamic: bool) -> String {

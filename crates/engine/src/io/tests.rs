@@ -55,7 +55,7 @@ fn save_keeps_the_destination_access_restrictions() {
     let fresh = dir.join("new.xlsx");
     write_file(fresh.to_str().unwrap(), b"v").unwrap();
     let mode = std::fs::metadata(&fresh).unwrap().permissions().mode() & 0o777;
-    assert!(mode & 0o022 == 0, "mode {mode:o}");
+    assert!(mode & 0o077 == 0, "mode {mode:o}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

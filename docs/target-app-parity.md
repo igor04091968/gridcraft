@@ -1,12 +1,20 @@
 # Target-app parity: GridCraft vs Microsoft Excel
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-25 · **Change:** minor (automation: macro interface; earlier: catalog count 276 / 292, as `cargo xtask parity` measures; automation: typed macros in the engine; several windows: a native window per workbook window, New Window on the same workbook, Arrange All; no score change) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (pinned XLSX corpus, metadata and in-cell picture type fixes; automation: macro interface; earlier: catalog count 276 / 292, as `cargo xtask parity` measures; automation: typed macros in the engine; several windows: a native window per workbook window, New Window on the same workbook, Arrange All; no score change) · **Target:** Microsoft Excel (Microsoft 365)
 
 This is the authoritative parity assessment. [`ROADMAP.md`](../ROADMAP.md) summarizes it,
 [`gaps.md`](gaps.md) lists every shortfall, and the area checklists hold the detail:
 [functions](function-parity.md), [charts](chart-parity.md), [file formats](file-format-parity.md),
 [UI](ui-parity.md), [hardware](hardware-parity.md), [localization](localization-parity.md). The
 generated ribbon checklist is [`parity-checklist.md`](parity-checklist.md).
+
+## Latest verified XLSX evidence
+
+The [2026-11-04 external corpus run](xlsx-corpus-2026-11-04.md) checks 78 pinned Calamine
+fixtures: 76 open, 283/284 trusted cached results match, and round-trip-differing files fall
+from 26 to 0 after core metadata, Strict relationship and in-cell picture rich-value type fixes. This small regression corpus
+does not establish business-workbook coverage or repair-free opening in Excel; readiness
+estimates below have not been recalibrated from it.
 
 ## Summary
 
@@ -334,6 +342,7 @@ The inventory carried over from the 2026-10-07 ROADMAP.md, updated for what land
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-04 | minor | Pinned 78-file XLSX corpus: preserve metadata and in-cell picture types; zero round-trip differences, one cached VLOOKUP mismatch; Excel verification remains |
 | 2026-10-25 | minor | Automation: macro interface (Automate › Macros, the Macros and Record Macro dialogs, the step editor, shortcuts) (no score change) |
 | 2026-10-25 | trivial | Catalog count 276 / 292 in the summary table and the method, as `cargo xtask parity` measures (no score change) |
 | 2026-10-22 | minor | Several windows on the desktop: a native window per workbook window, New Window on the same workbook, Switch Windows and Arrange All; "one window" removed from UI/UX fidelity, Hardware and the interaction-fidelity discount; no score change |

@@ -1,6 +1,6 @@
 # File-format parity
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-26 · **Change:** minor (`file.exportCsv {values: true}` writes raw values for automation; .xls dialog sheets are skipped instead of read as worksheets; `.xls` import reads each sheet's display options from WINDOW2: right-to-left, gridlines, headings, zeros, formulas; XLSX text boxes and shapes keep their paragraphs' right-to-left direction on save; CSV/TSV/TXT can open with every field kept as text via `file.open {csvAsText}`; formulas over Excel's 8,192 characters, and `%` or call chains past the nesting limit, are parse errors instead of stack overflows when a file is opened; XLSX PivotTables read and write `rowGrandTotals`/`colGrandTotals` the way Excel does, so a table saved with only one grand total opens with the right one; HTML export keeps right-to-left; CSV and text import detects likely Windows-1256 Arabic when invalid UTF-8 has Arabic byte runs; other invalid UTF-8 remains Windows-1252; HTML export places pictures and charts, as inline SVG, at their anchors) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (in-cell picture rich-value types/flags written on save; core document timestamps, editor, revision and other standard metadata survive save; Strict extended properties are recognized; pinned external XLSX corpus run, see corpus report; `file.exportCsv {values: true}` writes raw values for automation; .xls dialog sheets are skipped instead of read as worksheets; `.xls` import reads each sheet's display options from WINDOW2: right-to-left, gridlines, headings, zeros, formulas; XLSX text boxes and shapes keep their paragraphs' right-to-left direction on save; CSV/TSV/TXT can open with every field kept as text via `file.open {csvAsText}`; formulas over Excel's 8,192 characters, and `%` or call chains past the nesting limit, are parse errors instead of stack overflows when a file is opened; XLSX PivotTables read and write `rowGrandTotals`/`colGrandTotals` the way Excel does, so a table saved with only one grand total opens with the right one; HTML export keeps right-to-left; CSV and text import detects likely Windows-1256 Arabic when invalid UTF-8 has Arabic byte runs; other invalid UTF-8 remains Windows-1252; HTML export places pictures and charts, as inline SVG, at their anchors) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Every format Excel opens or saves, with GridCraft's read and write support, fidelity and tests.
 Part of [target-app-parity.md](target-app-parity.md). **File formats: ~50% ready, 80–120 h**
@@ -13,6 +13,21 @@ support comes from `crates/engine/src/io.rs` (`FileKind`), `crates/xlsx/src` and
 
 Legacy scalar `INDEX(range, MATCH(...))` formulas remain ordinary formulas on save, including when
 shared formulas are expanded during import (`array_export.rs`, #1505).
+
+## Pinned external corpus
+
+The reproducible external run uses 78 Calamine XLSX fixtures, pinned by commit and SHA-256.
+The corpus includes regression and intentionally malformed files; it is not a representative business
+corpus. The CLI already compares trusted cached formula values and round-trip fidelity. See
+[the run report](xlsx-corpus-2026-11-04.md) and [the manifest](corpus/calamine-ad7f2fa.json).
+The final pinned run has no round-trip differences in its 76 opened files; one cached VLOOKUP
+result still differs. Static in-cell pictures now write `rdRichValueTypes` with built-in global
+key flags; tests verify the namespace, relationship, content type and payload over repeated saves.
+Excel-side repair-free opening is still unverified. Core document metadata (including source
+timestamps, last editor and revision) now survives import and save, and Strict
+`extendedProperties` relationships are recognized. Native saving creates new Unix workbook files
+with mode 0600 even under a permissive umask, and retains the destination access restrictions
+when replacing an existing file (`engine/src/io.rs`, filesystem regression tests).
 
 ## Workbook formats
 
@@ -62,6 +77,11 @@ values) is still dropped.
 | Password-encrypted workbooks (Agile/Standard encryption) | R | **yes** (#11): asks for the password on open; Agile (AES-128/192/256, SHA-1/256/384/512) and Standard (AES, SHA-1) | no (opens with no save path; Save As writes it without the password) | Clean-room from [MS-OFFCRYPTO] on the CFB reader. RC4, Extensible and certificate-only encryption refused with a message. Data-integrity HMAC not checked | `crypto/tests.rs`, `encrypted_tests.rs` |
 | `.xlw` Excel 4.0 workbook, `.wk*`, `.dbf` | open only (some) | no | no | Rare | — |
 
+Static in-cell PNG/JPEG pictures write the `rdRichValueTypes` workbook relationship, content
+type and `richdata2` global key flags along with their values, structures, metadata and images.
+A regression checks the namespace, flags, payload and clean reopen over two saves; books without
+cell pictures do not gain this part. Custom rich-value types remain outside this implementation.
+
 ## Text and data formats
 
 | Format | Excel | GridCraft read | GridCraft write | Notes |
@@ -110,6 +130,8 @@ refresh. Counted under features (Get & Transform, ~10% ready), not here.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-04 | minor | In-cell images write rich-value types and global flags; repeated-save namespace/payload regression |
+| 2026-11-04 | minor | Pinned 78-file external Calamine corpus; preserve core document metadata and recognize Strict extended properties; see dated corpus report for measurements and limits |
 | 2026-10-21 | minor | HTML (Save as Web Page) writes pictures (`data:` URI `<img>`) and charts (inline SVG from the chart crate's drawing primitives, text included) at their anchors; the table uses the sheet's column widths and row heights when the sheet has either, and output for sheets without pictures or charts is unchanged |
 | 2026-10-20 | trivial | XLSX shared strings: Japanese phonetic runs (ふりがな, `<rPh sb="…" eb="…">` with `<phoneticPr>`) are read into the workbook and written back next to the string with the same text, so an open + save no longer deletes them; bad offsets and readings are dropped with a warning, a `<phoneticPr>` without runs is kept on its own, and when duplicate `<si>` items share a text but not a reading only the first reading is written (reported on open) (`phonetic_tests.rs`) |
 | 2026-10-20 | minor | A workbook theme's major/minor per-script typefaces (`<a:font script="Arab" typeface="…"/>`, also Hebr, Jpan and the rest) are read and written back in file order after `<a:cs>`; they were dropped before. A hostile file is held to 64 entries of 256 characters |

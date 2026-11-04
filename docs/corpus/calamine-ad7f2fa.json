@@ -1,0 +1,476 @@
+{
+  "schema": "gridcraft-corpus-manifest/1",
+  "source": "https://github.com/tafia/calamine",
+  "revision": "ad7f2fa15fd3cc8e122ae695e0e60770af57fca6",
+  "license": "MIT; upstream LICENSE-MIT.md",
+  "files": [
+    {
+      "path": "tests/EMSI_JobChange_UK.xlsx",
+      "sha256": "157c9bec706078abcf6ea5f6556511e8d8388bcd5761f8d70725eeede9da3207",
+      "bytes": 121833,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/absolute_shared_formula.xlsx",
+      "sha256": "a864970403fe21caedb19d386ae9a8c2a0b734dbbb650105cac66e17a771da80",
+      "bytes": 9025,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/any_sheets.xlsx",
+      "sha256": "fba48e0141f847d80738a4417f0a336cba92e4ac692d8dd7516eac41e32c9e4f",
+      "bytes": 14804,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/backward_slash_part_name.xlsx",
+      "sha256": "17270be2c9b871781527ef5d4f3356df25c6d9602312858ecd14c89019d9e524",
+      "bytes": 41148,
+      "application": null
+    },
+    {
+      "path": "tests/bool_cell_values.xlsx",
+      "sha256": "54072fcab7c85ebf4411c616585a6c3d66768c3f8fde6c5c0311e28cca9f38ce",
+      "bytes": 2213,
+      "application": null
+    },
+    {
+      "path": "tests/borders.xlsx",
+      "sha256": "8820872431c94dd92495a83f84201a9aad9b891e3700b03aaef0e724b8836d1e",
+      "bytes": 8472,
+      "application": "Microsoft Excel Online"
+    },
+    {
+      "path": "tests/case_insensitive_part_name.xlsx",
+      "sha256": "ce349c383557cf93b9a22c44f8aa27eee4442af522f10554cb65b2bd87a49e89",
+      "bytes": 5787,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/chart_sheet_range.xlsx",
+      "sha256": "8d22ddf71ce21c014fd25c2f94f52b9023212d6db7d67973f4194a354f955907",
+      "bytes": 15362,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/column_row_ranges.xlsx",
+      "sha256": "2e2fb35620c5ac2d042d9a54c700c3204a3d21b4b86938096a0c4d93487aad8c",
+      "bytes": 10274,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/date.xlsx",
+      "sha256": "0440916ec1b76ee4dd54955d59c2f42b266e9f5e4fccafb8cc1ed875908b26d2",
+      "bytes": 4659,
+      "application": "LibreOffice/7.4.7.2$Linux_X86_64 LibreOffice_project/40$Build-2"
+    },
+    {
+      "path": "tests/date_1904.xlsx",
+      "sha256": "8b9f2b71a46833d7b9d2250d60b3c0948024f3d2b26f38ef990c0f2b2683fe08",
+      "bytes": 4922,
+      "application": "LibreOffice/7.3.7.2$Linux_X86_64 LibreOffice_project/30$Build-2"
+    },
+    {
+      "path": "tests/date_1904_extlst.xlsx",
+      "sha256": "efbd7606c12c99d08c88d7d4d7f71470cbf299a89141287954a3d51de15810f7",
+      "bytes": 5322,
+      "application": "LibreOffice/7.3.7.2$Linux_X86_64 LibreOffice_project/30$Build-2"
+    },
+    {
+      "path": "tests/date_east_asian.xlsx",
+      "sha256": "09788594fcfc000b474b55feb0c798278cc51760cf395badfab73d3fb75a0e15",
+      "bytes": 3726,
+      "application": "LibreOffice/7.4.7.2$Linux_X86_64 LibreOffice_project/40$Build-2"
+    },
+    {
+      "path": "tests/date_east_asian_explicit.xlsx",
+      "sha256": "e940c11df9b0bd5add07a83de75ca6b010c8bfdfbbafaa095d0024cff3bc973f",
+      "bytes": 3251,
+      "application": "LibreOffice/7.4.7.2$Linux_X86_64 LibreOffice_project/40$Build-2"
+    },
+    {
+      "path": "tests/date_iso.xlsx",
+      "sha256": "773ffd1dc5049bd6dd61f81baf7d1aa276dea2bcd803fa0ed5858abe2effa5a4",
+      "bytes": 5057,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/date_quoted_format.xlsx",
+      "sha256": "20d65b62486fd168a5c6307aba787bc0474724cc4351ed0fc02d4058a47da350",
+      "bytes": 4996,
+      "application": "Microsoft Excel Compatible / Openpyxl 3.1.5"
+    },
+    {
+      "path": "tests/empty_s_attribute.xlsx",
+      "sha256": "8d7ff2e8dc3dde647aeee80112eaf1d843b8d53c7dabba87a32fdb2184c33321",
+      "bytes": 7700,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/empty_shared_string.xlsx",
+      "sha256": "88bcdff00d736ca11e578e7dc5d5072b29af99d8a2f6594fe479eb5c66c57c9f",
+      "bytes": 5811,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/empty_shared_string_value.xlsx",
+      "sha256": "9e8efcb8ecfc35ce46abfe37b8054c9f8cc02b94570063a76b8e8ec02334319b",
+      "bytes": 2886,
+      "application": null
+    },
+    {
+      "path": "tests/empty_sheet.xlsx",
+      "sha256": "a388c9659cab5586ad0f4947945cce45d6c95d1bb872662e43c9562db4234d98",
+      "bytes": 3551,
+      "application": null
+    },
+    {
+      "path": "tests/encoded_entities.xlsx",
+      "sha256": "e67b578bb047871764ac821e7f18ed6dba3c247850b741d88a9c5b6d74831d9a",
+      "bytes": 5821,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/errors.xlsx",
+      "sha256": "8d2b17a3170a47647f18798dc3dbe7504aaeb256f9b73485c69d103b0e0021f8",
+      "bytes": 9540,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/formula.issue.xlsx",
+      "sha256": "6df6d17418d03256c8df2aedb3f066ac00c0cdd65fa235ab21d5dbc5471ab053",
+      "bytes": 8626,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/formula_range_without_column_component.xlsx",
+      "sha256": "34f2fe682aee3c00dfcff7f05f5120450166f9338f41c72f2e0098a8d2acd0cd",
+      "bytes": 9770,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/has_x000D_.xlsx",
+      "sha256": "c69c913718bfdeea38ac4f4347334967c9beae9e8a3ba260cdc8ddf568392bb1",
+      "bytes": 8248,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/has_x000D_inline.xlsx",
+      "sha256": "3a7f67ed202636416bd103f302347978101439bc0721c7351281fd1958c034e3",
+      "bytes": 4968,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/has_x000D_str.xlsx",
+      "sha256": "74348b441cbaea8e0440b06452923434fb316fb9ad9696ce2f7927a95a3f240e",
+      "bytes": 4993,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/header-row.xlsx",
+      "sha256": "cd0b97da106cf58a4f49dbc4b942bf57fcbd002450dad6387e297f604d97a17b",
+      "bytes": 9753,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/hyperlinks.xlsx",
+      "sha256": "ab148c6f8889d1a27d8a2dcc87156513a9ae54df9f2213a70e56c7710a108b2d",
+      "bytes": 6079,
+      "application": "Microsoft Excel Compatible / Openpyxl 3.1.5"
+    },
+    {
+      "path": "tests/hyperlinks_escaped.xlsx",
+      "sha256": "6c0f44d17fc89ef71f1cf53c93bd05ca892eef352e6fb2dced223a4bd28097c0",
+      "bytes": 6108,
+      "application": "Microsoft Excel Compatible / Openpyxl 3.1.5"
+    },
+    {
+      "path": "tests/inlineStr_cdata.xlsx",
+      "sha256": "e83c8f57b354e05c65d2cb0518716a2b1be3733826e5088b6c952e818cecc67b",
+      "bytes": 1938,
+      "application": null
+    },
+    {
+      "path": "tests/inlineStr_with_value.xlsx",
+      "sha256": "cca8e17d029b43672ff0ff381d5ae679ab31eb533033f5acf7e8fae1c6450df7",
+      "bytes": 5654,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/invalid_relationship_errors.xlsx",
+      "sha256": "9f8fec3a71c50076b78a4a429819943029a8c3387c1c2d45a3be09caa2c08979",
+      "bytes": 6142,
+      "application": null
+    },
+    {
+      "path": "tests/inventory-table.xlsx",
+      "sha256": "d63fa89e938aad9635cd556f683b901cc1c118bf11b494b1156c4711e5329631",
+      "bytes": 8347,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/issues.xlsx",
+      "sha256": "f41bbd13cb3f9648b2492bc7ffce4c0544a27d0c62daec5c670ac15bdfe04bbc",
+      "bytes": 13571,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/merge_cells.xlsx",
+      "sha256": "34f6b2779f49991859045791d8be0c5027e09b395f067c4363e38813d1e6431c",
+      "bytes": 8948,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/merged_range.xlsx",
+      "sha256": "13553289594edda304fdd66e0176e8cb5dce365eff8f589b6d1290090f1bc575",
+      "bytes": 10741,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/minimal_package.xlsx",
+      "sha256": "655b1003ead7a4ec711733ef0f1139ef72c5b5465a8df30514206d1ee959ff72",
+      "bytes": 26928,
+      "application": null
+    },
+    {
+      "path": "tests/missing_r_attributes.xlsx",
+      "sha256": "390bab89749f06bb867290ec6b2d3e078e8374688dbc0955bd79f33397658b14",
+      "bytes": 15975,
+      "application": null
+    },
+    {
+      "path": "tests/missing_r_attributes_fixed_by_excel.xlsx",
+      "sha256": "fc722fe62860af54cca1b625268b8bf5b8e1e8819627ef322fcc292f484b5770",
+      "bytes": 21302,
+      "application": "Microsoft Excel Online"
+    },
+    {
+      "path": "tests/multi_axis_shared_formula.xlsx",
+      "sha256": "66767c7fa40273ebba9d5e92b9f371b314c1d75c44eebc6e0c3744e58af5b52a",
+      "bytes": 9056,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/no-header.xlsx",
+      "sha256": "54cd49194bde6c04ae89b1ff5e9b129e1447393e49256f41cfa8ce0351594bff",
+      "bytes": 4716,
+      "application": null
+    },
+    {
+      "path": "tests/non_ascii_shared_formula.xlsx",
+      "sha256": "e2d4b686c10ba04c8659acab50fdba198b298ea754cb4ff897ba2d8e63ab10fa",
+      "bytes": 39918,
+      "application": "Microsoft Excel Online"
+    },
+    {
+      "path": "tests/non_monotonic_si.xlsx",
+      "sha256": "af3e7621784d15e8caea0c16ae79dba48d4bd4a0ba44bf73f73279419c17711c",
+      "bytes": 9103,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/nonstandard-xml-ns-prefix.xlsx",
+      "sha256": "bb4c4bd4b90a742abf32dc57bec07c261e7671516a81339adf712fd32f0ba3c7",
+      "bytes": 3081,
+      "application": null
+    },
+    {
+      "path": "tests/password_protected.xlsx",
+      "sha256": "caae96225a5fbe2f33b0224d638de88ba37700e1af5f14e3b95a7e92aa96453f",
+      "bytes": 14848,
+      "application": null
+    },
+    {
+      "path": "tests/picture.xlsx",
+      "sha256": "e9a3243170755319fc54bf14991bb623636866cb37ba1676784b39bea631496c",
+      "bytes": 56544,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/picture_richdata.xlsx",
+      "sha256": "d530b333405b18ce9f29fcc5be54b7a7b0d3a9e1cdfea1d1b91f65991377c585",
+      "bytes": 185998,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/pictures_in_cell_and_over_cell.xlsx",
+      "sha256": "3460ee84d72a1b5d43bc0ef6676b5712868e1292060dbfd67a646ea477703c4a",
+      "bytes": 12878,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/pivots.xlsx",
+      "sha256": "632407ef8f5a5b45d93781b78b303c662aeea83c11d43e04ce5b07da96595235",
+      "bytes": 34944,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/problematic_formats.xlsx",
+      "sha256": "86a026b1defd96e407b00813118833bfc8ceee383cacb0f32afbd71648678fa6",
+      "bytes": 9129,
+      "application": "Microsoft Excel Online"
+    },
+    {
+      "path": "tests/readings.xlsx",
+      "sha256": "561beb646c7cc30e65109f17779dd23a99231a6e8f53dfb5945a1173c58134b3",
+      "bytes": 8976,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/renamed_workbook_part.xlsx",
+      "sha256": "895dd375ff6dc7dc9c2887b67910f067c80eac55214accf3bfd7af21c25f5efc",
+      "bytes": 2524,
+      "application": null
+    },
+    {
+      "path": "tests/rich_text_shared_strings.xlsx",
+      "sha256": "b8f7362e3c347442b2ed453eed3bad99b6cae19fbf819a06502aa0934a71a6d5",
+      "bytes": 8498,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/richtext-after-plain.xlsx",
+      "sha256": "874eb815ab79ff6a6b5524c6980c9f8e8b5840fb950cfe18ee21b0f123ef4842",
+      "bytes": 8210,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/richtext-namespaced.xlsx",
+      "sha256": "b495b2bf4d4d2edc66daaca107981a66c5ec608cc46476251498ce0af8507a88",
+      "bytes": 10070,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/rph.xlsx",
+      "sha256": "d08c63dcee4f6ecf2c600e237901e1bf6681f11410d8055c0e5580f30ee77604",
+      "bytes": 5867,
+      "application": "LibreOffice/6.4.3.2$Linux_X86_64 LibreOffice_project/40$Build-2"
+    },
+    {
+      "path": "tests/shared_formula_bench.xlsx",
+      "sha256": "fe5953d4508fdf3d8c2e8697aa073f1d5d931d11c6706cd22bd04b316e7d2a99",
+      "bytes": 11785,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/shared_formula_dragged.xlsx",
+      "sha256": "60ec18b2f7be206704f00f09ea73b48a634fac316eb0191fd60be916bc0d4590",
+      "bytes": 8051,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/shared_formula_function_names.xlsx",
+      "sha256": "28024006f012cf72c7ef24e90dac30900aac0dbc5200361be24dc13f5564e36e",
+      "bytes": 6501,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/shared_formula_reversed.xlsx",
+      "sha256": "0c536a9c1a5ab1d7ab8fef61e5029b0527f2fb6e6abd522f17a15b8415ff6f66",
+      "bytes": 9789,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/shared_formula_simple.xlsx",
+      "sha256": "aa951fd8c55f7a9104515736e497e2dd393daec1077cf9401162070555ee6fe4",
+      "bytes": 10178,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/sheet_names_order.xlsx",
+      "sha256": "7aa77af474c6badf74dc4bd7e3d4a165fca5756898807cb4b4a1ba50cfc55e78",
+      "bytes": 10660,
+      "application": "LibreOffice/6.3.0.4$MacOSX_X86_64 LibreOffice_project/057fc023c990d676a43019934386b85b21a9ee99"
+    },
+    {
+      "path": "tests/strict_iso_paths.xlsx",
+      "sha256": "45ddc3571627cd4fb37df8b1a7d97b56724fea3e2e7073896f2a0c24300fe201",
+      "bytes": 21205,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/string-ref.xlsx",
+      "sha256": "e48cc42f0290f3284bb50015ea791833da1b91273ede58e591d241c4f0ec170c",
+      "bytes": 10031,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/styles.xlsx",
+      "sha256": "95729c12e523095cf18d37bbc0b9c0ac9a1f5239cebbfda077a2105b6be4903a",
+      "bytes": 8936,
+      "application": "Microsoft Excel Online"
+    },
+    {
+      "path": "tests/table-multiple.xlsx",
+      "sha256": "8d39e98b17bcd2937171dacbae296c2f3cd975bbf41809738c05c7ffdccc977f",
+      "bytes": 11520,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/table_with_absolute_paths.xlsx",
+      "sha256": "c764ab03573cae80c808ff42cc9bf90f054c43e598857ef522ec767b3d8dd5a1",
+      "bytes": 5953,
+      "application": "Microsoft Excel Compatible / Openpyxl 3.1.5"
+    },
+    {
+      "path": "tests/table_with_insertrow_attribute.xlsx",
+      "sha256": "46c11dd034dae5a520cec869a256efba2dc6399d25936fc92ce908fbd752591a",
+      "bytes": 14337,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/temperature-fallible.xlsx",
+      "sha256": "86bf47cd04fedabc6a1d0b1bcb1906c9e5436727166634493398d0d6195aecc6",
+      "bytes": 8825,
+      "application": "Microsoft Macintosh Excel"
+    },
+    {
+      "path": "tests/temperature-in-middle.xlsx",
+      "sha256": "23da8d6463707d1286cb1ad64491ce98ccd0e2f4c30a0ab45e6282d6f036f872",
+      "bytes": 5837,
+      "application": null
+    },
+    {
+      "path": "tests/temperature-table.xlsx",
+      "sha256": "2770aa2fdf782414e83ee80c7b25b4a102204a28a19f15fe5177661e1174eb4b",
+      "bytes": 11478,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/temperature.xlsx",
+      "sha256": "1b7b26626405830d3f39cca681e77eee7fc4975dd987502470d8e750982ff6a1",
+      "bytes": 3599,
+      "application": null
+    },
+    {
+      "path": "tests/whitespace_trim.xlsx",
+      "sha256": "95a2d8a49f17923986ff1a5b4ebd4f0e233a6aafddb0086b01e874ed6171fef5",
+      "bytes": 2901,
+      "application": null
+    },
+    {
+      "path": "tests/workbook_custom_properties.xlsx",
+      "sha256": "b1e6f90c3289afb0f7b1545c584167385d841c7f894f435ed28c8567a035928f",
+      "bytes": 2658,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/workbook_properties.xlsx",
+      "sha256": "2b32d46955fec20c7e515d3f339de94951f39bc0925c6da8049e0dceb2af2df2",
+      "bytes": 2918,
+      "application": "Microsoft Excel"
+    },
+    {
+      "path": "tests/workbook_properties_missing.xlsx",
+      "sha256": "134fe3515fffa1cfd85927b45dcff7dd23d40c6e0376a6a416b2a3a461cb0d6d",
+      "bytes": 1570,
+      "application": null
+    },
+    {
+      "path": "tests/worksheet_range_does_not_overflow.xlsx",
+      "sha256": "6bcfec7da59c0ba9fdaef1f9835c51bb48c84e83a47e2009753a4339fab8d0e2",
+      "bytes": 145592,
+      "application": "gnumeric"
+    }
+  ]
+}

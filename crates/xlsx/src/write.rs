@@ -375,9 +375,22 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>) 
         ("dc:creator", &p.author),
         ("cp:keywords", &p.keywords),
         ("dc:description", &p.description),
+        ("cp:lastModifiedBy", &p.last_modified_by),
+        ("cp:lastPrinted", &p.last_printed),
+        ("cp:revision", &p.revision),
+        ("dc:language", &p.language),
+        ("dc:identifier", &p.identifier),
+        ("cp:category", &p.category),
+        ("cp:contentStatus", &p.content_status),
+        ("cp:version", &p.version),
     ] {
         if !v.is_empty() {
             let _ = write!(core, "<{tag}>{}</{tag}>", esc(v));
+        }
+    }
+    for (tag, v) in [("dcterms:created", &p.created), ("dcterms:modified", &p.modified)] {
+        if !v.is_empty() {
+            let _ = write!(core, "<{tag} xsi:type=\"dcterms:W3CDTF\">{}</{tag}>", esc(v));
         }
     }
     core.push_str("</cp:coreProperties>");

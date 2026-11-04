@@ -227,8 +227,8 @@ pub fn validate_package(bytes: &[u8]) -> Result<Vec<String>, String> {
     Ok(issues)
 }
 
-/// Every relationship kind (last segment of the type, the same in the transitional and strict
-/// namespaces) in the package's relationship parts, keyed in lower case. Relationships that carry
+/// Every relationship kind in the package's relationship parts, keyed in lower case, with the
+/// Strict `extendedProperties` spelling normalized to `extended-properties`. Relationships that carry
 /// nothing are left out, as a save may rightly drop them: a link to a place in the workbook
 /// (`#Sheet1!A1`, written as a cell's `location`) and a target part with nothing in it.
 pub(super) fn relationship_kinds(bytes: &[u8]) -> Result<BTreeMap<String, String>, String> {
@@ -258,7 +258,11 @@ pub(super) fn relationship_kinds(bytes: &[u8]) -> Result<BTreeMap<String, String
             {
                 continue;
             }
-            kinds.entry(kind.to_ascii_lowercase()).or_insert_with(|| kind.to_string());
+            let key = match kind.to_ascii_lowercase().as_str() {
+                "extendedproperties" => "extended-properties".to_string(),
+                key => key.to_string(),
+            };
+            kinds.entry(key).or_insert_with(|| kind.to_string());
         }
     }
     Ok(kinds)

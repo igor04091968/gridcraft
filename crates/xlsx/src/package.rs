@@ -25,8 +25,8 @@ pub struct Package<'a> {
 #[derive(Clone, Debug)]
 pub struct Rel {
     pub id: String,
-    /// Last path segment of the relationship type (`worksheet`, `styles`, …): the same for the
-    /// transitional and strict namespaces.
+    /// Last path segment of the relationship type (`worksheet`, `styles`, …), with the Strict
+    /// `extendedProperties` spelling normalized to transitional `extended-properties`.
     pub kind: String,
     /// Resolved part name (no leading `/`), or the raw target for external relationships.
     pub target: String,
@@ -120,7 +120,11 @@ impl<'a> Package<'a> {
             .filter_map(|r| {
                 let id = r.attr("Id")?.to_string();
                 let ty = r.attr("Type").unwrap_or("");
-                let kind = ty.rsplit('/').next().unwrap_or("").to_string();
+                let kind = match ty.rsplit('/').next().unwrap_or("") {
+                    "extendedProperties" => "extended-properties",
+                    kind => kind,
+                }
+                .to_string();
                 let target_raw = r.attr("Target")?;
                 let external = r.attr("TargetMode").is_some_and(|m| m.eq_ignore_ascii_case("External"));
                 let target = if external { target_raw.to_string() } else { resolve(dir, target_raw) };

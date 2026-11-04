@@ -229,6 +229,30 @@ fn diff_detects_changed_cond_format_rule() {
     assert_eq!(diffs(&with(bar(true, 1)), &with(bar(true, 5))), 0);
 }
 
+#[test]
+fn diff_detects_document_metadata_loss() {
+    let mut a = book(&[("A1", "1", n(1.0))]);
+    a.props.created = "2025-01-02T03:04:05Z".into();
+    a.props.revision = "42".into();
+    let mut b = a.clone();
+    b.props.created.clear();
+    let categories = diff_workbooks(&a, &b, &Options::default());
+    assert_eq!(categories.iter().find(|c| c.name == "docProps").unwrap().diffs, 1);
+    let categories = diff_workbooks(&a, &a, &Options::default());
+    assert_eq!(categories.iter().find(|c| c.name == "docProps").unwrap().diffs, 0);
+}
+
+#[test]
+fn strict_extended_properties_is_the_same_relationship_kind() {
+    let kinds = |kind: &str| {
+        let rels = format!(r#"<Relationships><Relationship Id="rId1" Type="http://example.test/{kind}" Target="docProps/app.xml"/></Relationships>"#);
+        let bytes = zip_of(&[("_rels/.rels", &rels), ("docProps/app.xml", "<Properties><Company>Test</Company></Properties>")]);
+        package::relationship_kinds(&bytes).unwrap().into_keys().collect::<Vec<_>>()
+    };
+    assert_eq!(kinds("extendedProperties"), kinds("extended-properties"));
+    assert_eq!(kinds("extendedProperties"), ["extended-properties"]);
+}
+
 fn zip_of(parts: &[(&str, &str)]) -> Vec<u8> {
     let mut z = zip::ZipWriter::new(Cursor::new(Vec::new()));
     for (name, body) in parts {
@@ -410,6 +434,7 @@ fn json_schema_keys() {
     assert_eq!(
         keys(&f["roundTrip"]["categories"]),
         set(&[
+            "docProps",
             "sheets",
             "values",
             "formulas",

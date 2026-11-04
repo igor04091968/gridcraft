@@ -196,6 +196,77 @@ fn pictures_roundtrip_across_sheets_with_and_without_dynamic_arrays() {
 }
 
 #[test]
+fn cell_picture_type_flags_and_payload_survive_repeated_saves() {
+    // The independent reader fixture intentionally contains an unsupported rich value and
+    // no styles part. Use a clean model here so any save/reopen warning is a writer regression.
+    let original = Arc::new(picture(png(), "image/png", "green & <image>"));
+    let mut wb = Workbook::new();
+    wb.sheet_mut(0).unwrap().set_picture(at("A1"), original.clone());
+    for _ in 0..2 {
+        let bytes = write_xlsx(&wb).unwrap();
+        let mut package = Package::open(&bytes).unwrap();
+        let rels = package.rels("xl/workbook.xml").unwrap();
+        let types: Vec<_> = rels.iter().filter(|r| r.kind == "rdRichValueTypes").collect();
+        assert_eq!(types.len(), 1, "cell pictures require a rich-value types part");
+        assert!(!types[0].external);
+        let types_xml = package.read_xml(&types[0].target).unwrap().unwrap();
+        assert_eq!(types_xml.name, "rvTypesInfo");
+        // The model XML reader intentionally drops namespace declarations. Resolve the root
+        // namespace independently so a correct local name in the wrong namespace is rejected.
+        let types_bytes = package.read(&types[0].target).unwrap().unwrap();
+        let mut reader = quick_xml::NsReader::from_reader(types_bytes.as_slice());
+        loop {
+            let (namespace, event) = reader.read_resolved_event().unwrap();
+            match event {
+                quick_xml::events::Event::Start(_) => {
+                    assert_eq!(
+                        namespace,
+                        quick_xml::name::ResolveResult::Bound(quick_xml::name::Namespace(
+                            b"http://schemas.microsoft.com/office/spreadsheetml/2017/richdata2"
+                        ))
+                    );
+                    break;
+                }
+                quick_xml::events::Event::Eof => panic!("missing rich-value types root"),
+                _ => {}
+            }
+        }
+        let flags = types_xml.child("global").unwrap().child("keyFlags").unwrap();
+        for name in [
+            "_Self",
+            "_DisplayString",
+            "_Flags",
+            "_Format",
+            "_SubLabel",
+            "_Attribution",
+            "_Icon",
+            "_Display",
+            "_CanonicalPropertyNames",
+            "_ClassificationId",
+        ] {
+            let key = flags.kids("key").find(|key| key.attr("name") == Some(name)).unwrap();
+            assert!(key.kids("flag").any(|flag| flag.attr("name") == Some("ExcludeFromCalcComparison") && flag.attr_bool("value") == Some(true)));
+            assert_eq!(
+                key.kids("flag").any(|flag| flag.attr("name") == Some("ExcludeFromFile") && flag.attr_bool("value") == Some(true)),
+                name == "_Self"
+            );
+        }
+        let content_types = package.read_xml("[Content_Types].xml").unwrap().unwrap();
+        assert!(content_types.kids("Override").any(|entry| {
+            entry.attr("PartName") == Some(format!("/{}", types[0].target).as_str())
+                && entry.attr("ContentType") == Some("application/vnd.ms-excel.rdRichValueTypes+xml")
+        }));
+        let (loaded, report) = read_xlsx(&bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        assert_eq!(loaded.sheet(0).unwrap().cell_pictures.get(&at("A1")), Some(&original));
+        wb = loaded;
+    }
+    let bytes = write_xlsx(&Workbook::new()).unwrap();
+    let mut package = Package::open(&bytes).unwrap();
+    assert!(!package.rels("xl/workbook.xml").unwrap().iter().any(|r| r.kind == "rdRichValueTypes"));
+}
+
+#[test]
 fn broken_picture_references_keep_the_scalar_fallback_with_warnings() {
     for (part, from, to) in [
         ("sheets/data.xml", "vm=\"2\"", "vm=\"999\""),

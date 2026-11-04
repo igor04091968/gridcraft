@@ -1,6 +1,6 @@
 # Roadmap detail
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-23 · **Change:** minor (test command) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (pinned XLSX corpus, metadata and in-cell picture type fixes; test command) · **Target:** Microsoft Excel (Microsoft 365)
 
 Forward-looking plan. The one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work
 list is [`gaps.md`](gaps.md); numbers and method are in
@@ -13,7 +13,9 @@ list is [`gaps.md`](gaps.md); numbers and method are in
    (#158, #161), macOS document open (#164, #167), German UI, numbers and formulas (#163),
    15-digit comparison (#187). 8–15 h. Language work should extend the new `i18n` catalog past the
    ribbon rather than add scattered literals.
-2. **XLSX on real files** (gaps #1, #3): corpus run plus Excel opening our output.
+2. **XLSX on real files** (gaps #1, #3): first pinned 78-file external regression corpus
+   [completed](xlsx-corpus-2026-11-04.md), 26 → 0 round-trip-differing files after metadata and in-cell picture type fixes.
+   Next: representative business corpus and Excel opening our output.
 3. **Large workbooks and multi-threaded recalc** (gap #2).
 
 ## Alpha gate
@@ -113,6 +115,7 @@ to check our files, and Windows machines with the reported GPU drivers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-04 | minor | Pinned 78-file XLSX corpus: preserve metadata and in-cell picture types; zero round-trip differences, one cached VLOOKUP mismatch; Excel verification remains |
 | 2026-10-23 | minor | Measuring: tests run through `cargo xtask test` |
 | 2026-10-11 | minor | PivotTable calculated fields landed |
 | 2026-10-10 | minor | Current focus and M15 updated for the 10-10 merges |
