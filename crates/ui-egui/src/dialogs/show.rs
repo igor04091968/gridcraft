@@ -399,7 +399,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 if d.name == "solver" {
                     app.open_dialog("solverResults", r);
                 } else if d.name == "openPassword" {
-                    let path = d.values.get("path").and_then(Json::as_str).map(str::to_string);
+                    let path = d.values.get("path").or_else(|| d.values.get("name")).and_then(Json::as_str).map(str::to_string);
                     app.after_open(path.as_deref(), &r);
                 }
             }

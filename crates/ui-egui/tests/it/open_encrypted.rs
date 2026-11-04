@@ -93,6 +93,16 @@ fn cancel_leaves_nothing_open() {
 }
 
 #[test]
+fn a_file_picked_on_the_web_joins_recent_workbooks() {
+    let inbox: Inbox = Default::default();
+    let mut h = harness(Services { inbox: Some(inbox.clone()), ..Default::default() });
+    let bytes = gridcraft_engine::io::save_bytes(&h.state().session.doc().unwrap().wb, "Plain.xlsx").unwrap();
+    inbox.lock().unwrap().push(("Plain.xlsx".into(), bytes));
+    h.run_steps(3);
+    assert_eq!(h.state().ui.recent, ["Plain.xlsx"]);
+}
+
+#[test]
 fn a_file_picked_on_the_web_asks_for_its_password_too() {
     let inbox: Inbox = Default::default();
     let mut h = harness(Services { inbox: Some(inbox.clone()), ..Default::default() });
@@ -106,6 +116,7 @@ fn a_file_picked_on_the_web_asks_for_its_password_too() {
     assert_eq!(dialog(&h), None);
     assert_eq!(a1(&h), Value::Number(42.0));
     assert_eq!(h.state().session.active().unwrap().path, None);
+    assert_eq!(h.state().ui.recent, ["Secret.xlsx"]);
 }
 
 #[test]

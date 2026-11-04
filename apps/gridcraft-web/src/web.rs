@@ -172,6 +172,7 @@ impl eframe::App for WebShell {
                 let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped.xlsx".into());
                 match f.bytes_async().await {
                     Ok(bytes) => {
+                        crate::recent::store(&name, &bytes);
                         inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
                         ctx.request_repaint();
                     }
@@ -217,6 +218,8 @@ impl eframe::App for WebShell {
 
 fn services(inbox: Inbox, ctx: egui::Context) -> Services {
     let open_inbox = inbox.clone();
+    let recent_inbox = inbox.clone();
+    let recent_ctx = ctx.clone();
     let picture_ctx = ctx.clone();
     Services {
         copy_html: Some(Box::new(copy_html)),
@@ -231,11 +234,14 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
                 else {
                     return;
                 };
+                let name = file.file_name();
                 let bytes = file.read().await;
-                inbox.lock().unwrap_or_else(|e| e.into_inner()).push((file.file_name(), bytes));
+                crate::recent::store(&name, &bytes);
+                inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
                 ctx.request_repaint();
             });
         })),
+        open_recent_async: Some(Box::new(move |name| crate::recent::open(name, recent_inbox.clone(), recent_ctx.clone()))),
         pick_picture_async: Some(Box::new(move |inbox| {
             let ctx = picture_ctx.clone();
             wasm_bindgen_futures::spawn_local(async move {

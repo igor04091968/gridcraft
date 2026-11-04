@@ -2,6 +2,7 @@ use super::printing;
 
 type PickSave = Box<dyn Fn(&str) -> Option<String>>;
 type OpenUrl = Box<dyn Fn(&str)>;
+type OpenRecent = Box<dyn Fn(&str)>;
 type CopyHtml = Box<dyn FnMut(&str, &str) -> Result<(), String>>;
 type Download = Box<dyn Fn(&str, &[u8])>;
 type PrintPdf = Box<dyn Fn(&[u8])>;
@@ -37,6 +38,8 @@ pub struct Services {
     pub download: Option<Download>,
     /// Web: start an asynchronous file pick; the bytes arrive later in `inbox`.
     pub open_async: Option<Box<dyn Fn()>>,
+    /// Web: reopen a browser-stored recent workbook; its bytes arrive later in `inbox`.
+    pub open_recent_async: Option<OpenRecent>,
     /// Send an agent request to the native backend or authenticated browser control channel.
     pub agent_send: Option<Box<dyn Fn(serde_json::Value)>>,
     /// Browser: connect to a control server chosen in the panel; token is never persisted.

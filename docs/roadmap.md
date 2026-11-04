@@ -1,6 +1,6 @@
 # Roadmap detail
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (Pollinations connection settings and shared native backend; reviewed agent Apply/Undo guards; pinned XLSX corpus run, metadata and picture type fixes; test command) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (browser recent workbook reopen; Pollinations connection settings and shared native backend; reviewed agent Apply/Undo guards; pinned XLSX corpus run, metadata and picture type fixes; test command) · **Target:** Microsoft Excel (Microsoft 365)
 
 Forward-looking plan. The one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work
 list is [`gaps.md`](gaps.md); numbers and method are in
@@ -115,6 +115,7 @@ to check our files, and Windows machines with the reported GPU drivers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-04 | minor | Browser recent workbook reopen: IndexedDB file copies, localStorage names, preserved after reload; synthetic workbook browser check passed |
 | 2026-11-04 | minor | Pollinations connection settings, model catalog, key removal and auth check in desktop/web panel; built-in native backend; no readiness score change |
 | 2026-11-04 | minor | Pinned XLSX run now has zero round-trip differences after in-cell picture type fixes; business corpus and Excel verification remain |
 | 2026-11-04 | minor | Reviewed AI Apply rejects stale workbook context; agent Undo preserves later manual work |

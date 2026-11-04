@@ -11,6 +11,19 @@ impl SheetApp {
         self.after_engine();
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn open_recent(&mut self, path: &str) {
+        self.open_path(path);
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn open_recent(&mut self, path: &str) {
+        if let Some(open) = &self.services.open_recent_async {
+            self.backstage = None;
+            open(path);
+        }
+    }
+
     /// What follows a successful `file.open`: the workbook shows (not the Backstage), the Recent
     /// list (for a file on disk) and the open warnings notice. Shared by File › Open, the
     /// password dialog and the control channel.
@@ -87,10 +100,7 @@ impl SheetApp {
             let b64 = gridcraft_engine::io::base64_encode(&bytes);
             match self.run("file.open", json!({"name": &name, "base64": &b64})) {
                 // A file picked from File › Open (web) arrives here: show it, not the Backstage.
-                Ok(r) => {
-                    self.backstage = None;
-                    self.show_open_warnings(&r);
-                }
+                Ok(r) => self.after_open(Some(&name), &r),
                 Err(e) if e.contains(gridcraft_engine::io::PASSWORD_REQUIRED) => {
                     self.backstage = None;
                     self.open_dialog("openPassword", json!({"name": name, "base64": b64}));

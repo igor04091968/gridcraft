@@ -50,6 +50,10 @@ location /gridcraft/ {
 
 Local test: `python3 -m http.server 8765` inside the folder, then open http://localhost:8765/.
 
+## Recent workbooks
+
+Files opened through the browser picker or drag and drop join **File → Open → Recent**. GridCraft stores their names in `localStorage` and local copies in IndexedDB, so a recent workbook can be reopened after a reload without granting access to the original file. These copies stay in that browser and site origin; clearing site data removes them. Saving still downloads the workbook and does not update the stored recent copy.
+
 ## Browser control and AI agent
 
 The optional `web-control` service connects MCP and the review-based AI agent to the active browser workbook. Pollinations connection settings are edited in the AI panel and saved privately by the server; the browser retains no API key. The server keeps the model API key; `agent.run` only proposes a command, and **Apply** is required before the workbook changes. See [web-agent-runbook.md](../../docs/web-agent-runbook.md) for setup, limitations, security and verification. The control token in the query string grants workbook control: use only local or trusted private URLs and never publish such a URL.

@@ -416,7 +416,7 @@ fn recent_list(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage, out: &mut Ou
         }
         let resp = resp.on_hover_text(&path);
         if resp.clicked() {
-            app.open_path(&path);
+            app.open_recent(&path);
             if app.session.active().and_then(|d| d.path.as_deref()) == Some(path.as_str()) {
                 out.close = true;
             }

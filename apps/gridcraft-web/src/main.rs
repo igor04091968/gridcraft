@@ -23,6 +23,8 @@ mod host;
 #[cfg(any(target_arch = "wasm32", test))]
 mod prefs;
 #[cfg(target_arch = "wasm32")]
+mod recent;
+#[cfg(target_arch = "wasm32")]
 mod web;
 
 #[cfg(target_arch = "wasm32")]
