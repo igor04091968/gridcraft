@@ -16,8 +16,11 @@ pub(super) struct AppliedAction {
 impl SheetApp {
     fn agent_context(&self) -> Result<Json, String> {
         let d = self.session.doc().map_err(|e| e.to_string())?;
-        if self.editor.is_some() || self.session.in_group(d.uid) {
-            return Err("Finish the current edit or action before using the agent.".into());
+        if let Some(editor) = &self.editor {
+            return Err(format!("В ячейке {} не завершён ввод. Сохраните или отмените его в панели агента.", editor.cell.a1()));
+        }
+        if self.session.in_group(d.uid) {
+            return Err("Дождитесь завершения текущей операции с книгой перед запуском агента.".into());
         }
         Ok(json!({
             "doc": d.uid,

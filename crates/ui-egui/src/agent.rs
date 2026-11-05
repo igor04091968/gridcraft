@@ -214,6 +214,37 @@ impl SheetApp {
         }
     }
 
+    fn agent_operation_pending(&self) -> bool {
+        self.session.active().is_some_and(|doc| self.session.in_group(doc.uid))
+    }
+
+    fn start_agent_task(&mut self) {
+        if self.agent.task.trim().is_empty() || !self.agent.pending.is_empty() {
+            return;
+        }
+        if self.agent_operation_pending() {
+            self.agent.status = "Дождитесь завершения текущей операции с книгой перед запуском агента.".into();
+            return;
+        }
+        if self.services.agent_send.is_none() || (self.services.agent_connect.is_some() && !self.agent.web_connected) {
+            self.agent.status = "Подключение агента недоступно. Подключитесь перед отправкой задачи.".into();
+            return;
+        }
+        // Only the explicitly labeled UI action saves a draft. Snapshot/Apply/Undo
+        // RPCs continue to reject unfinished edits without writing anything.
+        if !self.commit_edit(0, 0, false, false) {
+            let reason = self.message.as_ref().map(|(_, message)| message.as_str()).unwrap_or("Проверьте ввод в ячейке.");
+            self.agent.status = format!("Не удалось сохранить ввод ячейки: {reason} Задача агенту не отправлена.");
+            return;
+        }
+        let task = self.agent.task.clone();
+        self.agent.log.push(format!("Задача: {task}"));
+        self.agent_send(
+            "agent.run",
+            json!({"task":task, "provider":self.agent.provider, "model":self.agent.model, "range":self.agent.range, "maxSteps":self.agent.max_steps}),
+        );
+    }
+
     fn show_agent_change(&mut self) -> Result<(), String> {
         let action = self.agent.last_change.clone().ok_or("Нет применённых изменений для просмотра.")?;
         let doc = self.session.doc().map_err(|e| e.to_string())?;
@@ -345,15 +376,20 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         });
         let label = ui.label("Задача");
         ui.add(egui::TextEdit::multiline(&mut app.agent.task).desired_rows(5).desired_width(f32::INFINITY)).labelled_by(label.id);
-        if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Выполнить / предложить")).clicked() && !app.agent.task.trim().is_empty()
-        {
-            let task = app.agent.task.clone();
-            let provider = app.agent.provider.clone();
-            let model = app.agent.model.clone();
-            let range = app.agent.range.clone();
-            let max_steps = app.agent.max_steps;
-            app.agent.log.push(format!("Задача: {task}"));
-            app.agent_send("agent.run", json!({"task": task, "provider": provider, "model": model, "range": range, "maxSteps": max_steps}));
+        let operation_pending = app.agent_operation_pending();
+        if operation_pending {
+            ui.label("Выполняется операция с книгой. Дождитесь её завершения перед запуском агента.");
+        } else if let Some(editor) = &app.editor {
+            ui.label(format!("В ячейке {} не завершён ввод. «Сохранить ввод и предложить» сохранит ячейку перед чтением таблицы.", editor.cell.a1()));
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Отменить ввод ячейки")).clicked() {
+                app.cancel_edit();
+                app.agent.status = "Ввод ячейки отменён. Текст задачи сохранён.".into();
+            }
+        }
+        let run_label =
+            if app.editor.is_some() { "Сохранить ввод и предложить" } else { "Выполнить / предложить" };
+        if ui.add_enabled(app.agent.pending.is_empty() && !operation_pending, egui::Button::new(run_label)).clicked() {
+            app.start_agent_task();
         }
         ui.separator();
         ui.label(&app.agent.status);
@@ -366,7 +402,10 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     serde_json::to_string_pretty(&json!({"command": action.get("command"), "params": action.get("params")})).unwrap_or_default(),
                 );
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Применить")).clicked() {
+                    if ui
+                        .add_enabled(app.agent.pending.is_empty() && app.editor.is_none() && !operation_pending, egui::Button::new("Применить"))
+                        .clicked()
+                    {
                         app.apply_agent_proposal(action.clone());
                     }
                     if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Отклонить")).clicked() {
@@ -383,7 +422,13 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 close_after_change = true;
             }
         }
-        if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Отменить последнее изменение")).clicked() {
+        if ui
+            .add_enabled(
+                app.agent.pending.is_empty() && app.editor.is_none() && !operation_pending,
+                egui::Button::new("Отменить последнее изменение"),
+            )
+            .clicked()
+        {
             app.agent_send("agent.undo", json!({}));
         }
         ui.separator();

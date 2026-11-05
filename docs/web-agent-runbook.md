@@ -1,6 +1,6 @@
 # Web agent runbook
 
-> **Last updated:** 2026-11-05 · **Change:** minor (Pollinations Free default and labeled catalog; Pollinations HTTP 400 diagnostics; Apply confirmation and navigation to changed cells; built-in HTTPS/WSS hosting and browser reconnect; Pollinations settings; guarded actions)
+> **Last updated:** 2026-11-05 · **Change:** minor (agent pending cell edit recovery; Pollinations Free default and labeled catalog; Pollinations HTTP 400 diagnostics; Apply confirmation and navigation to changed cells; built-in HTTPS/WSS hosting and browser reconnect; Pollinations settings; guarded actions)
 
 ## Scope
 
@@ -23,7 +23,7 @@ For browser use, build gridcraft-cli and the web distribution. Set GRIDCRAFT_CON
 
 The key must come from the provider's API platform. ChatGPT/Codex and Kimi Code subscriptions are separate from their API billing. For OpenAI, Kimi and PlusVibe, keys and endpoint overrides belong in the server service environment. Pollinations also supports a private settings file configured from the panel; the browser sends a new key only over the authenticated connection and never stores it locally. Keep the legacy GRIDCRAFT_AGENT_API_KEY, GRIDCRAFT_AGENT_BASE_URL, and GRIDCRAFT_AGENT_MODEL variables for existing OpenAI-compatible local services that call agent.run without a provider. Restart the control service after changing its environment. For remote browsers, use the [built-in HTTPS/WSS server](wss-hosting.md) or a trusted TLS reverse proxy.
 
-In **Automate → AI Agent**, connect through **Подключение веб-интерфейса**, choose a model, enter a task and run it. Legacy `?control=ws://127.0.0.1:8780&controlToken=...` URLs remain supported; the token grants workbook control, so do not publish URLs containing it. The initial response is a proposal. Review the command and arguments, then select **Применить**. The proposal remains visible until the reply confirms a write; errors and no-change replies retain it. A successful reply shows the cell/range when available. **Показать изменения** closes the agent panel, selects the target sheet/range and scrolls it into view. Actions without an explicit range reveal the current selection. It refuses navigation if another workbook is active. **Отменить последнее изменение** restores the agent action; selection navigation still permits guarded Undo. Nothing writes before Apply.
+In **Automate → AI Agent**, connect through **Подключение веб-интерфейса**, choose a model, enter a task and run it. Legacy `?control=ws://127.0.0.1:8780&controlToken=...` URLs remain supported; the token grants workbook control, so do not publish URLs containing it. If a cell draft is still open, the panel identifies its cell and offers **Сохранить ввод и предложить**: this explicitly commits the manual cell entry without moving selection, then requests a proposal from the updated workbook. **Отменить ввод ячейки** discards only that draft and retains the task. Invalid formulas/validation errors keep both draft and task and send no AI request; disconnected clients also keep the draft. An open undo group must finish normally; the panel never commits or rolls it back. Snapshot, Apply and Undo RPCs still reject unfinished edits and never save them automatically. The agent's guarded Undo rolls back only its applied command, preserving the manual cell input saved before the request. The initial response is a proposal. Review the command and arguments, then select **Применить**. The proposal remains visible until the reply confirms a write; errors and no-change replies retain it. A successful reply shows the cell/range when available. **Показать изменения** closes the agent panel, selects the target sheet/range and scrolls it into view. Actions without an explicit range reveal the current selection. It refuses navigation if another workbook is active. **Отменить последнее изменение** restores the agent action; selection navigation still permits guarded Undo. Agent commands do not write before Apply.
 
 ## Pollinations setup from the application
 
@@ -90,10 +90,13 @@ Verified 2026-11-05: `cargo xtask ci` passed all ten stages (2,830 Rust tests in
 
 Stop `gridcraft-web-control.service` to disconnect both agent and MCP. Remove `control` and `controlToken` from the URL to use the standalone editor. The workbook's ordinary File → Undo remains available after an applied proposal. Server logs must not include the token, API key or full workbook contents.
 
+Verified 2026-11-05: the pending-edit fix passed all ten `cargo xtask ci` stages (2,834 Rust tests including doctests). Chromium loaded the final optimized WASM with the public authenticated WSS backend and an isolated synthetic workbook. The earlier error was reproduced before the fix. The new Save-and-propose button committed A1 without moving selection; live Free Glyph Cluster read that exact value and proposed it for B1. Apply wrote B1 and guarded agent Undo restored B1 while retaining the manual A1 input. Cancel discarded only the draft; validation rejection retained the draft/task and sent no further AI request. RPC snapshot still refused an open draft. No page errors occurred and the server's saved provider model/key were unchanged. The owner's original workbook state was unavailable; reproduction used the same error with synthetic input.
+
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Agent panel explicitly saves or cancels a pending cell draft before a request; rejected input and open operations preserve drafts/tasks and do not contact AI |
 | 2026-11-05 | minor | Pollinations defaults to Free Glyph Cluster; live catalog retains paid models, sorts Free first and marks specialized moderation models |
 | 2026-11-05 | minor | Bounded Pollinations HTTP 400 response classification distinguishes invalid model, context limit and unsupported parameters without exposing echoed credentials or workbook text |
 | 2026-11-05 | minor | Apply retains proposals until success, distinguishes errors/no change, and offers Show changes without breaking agent Undo |
