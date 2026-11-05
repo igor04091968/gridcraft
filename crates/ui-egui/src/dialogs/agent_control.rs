@@ -103,9 +103,9 @@ fn install_from_dialog(d: &Dialog) -> Result<PathBuf, String> {
     let port = d.values.get("port").and_then(Json::as_str).unwrap_or("7979");
     validate_port(port)?;
     let app = std::env::current_exe().map_err(|e| format!("Cannot locate the GridCraft app: {e}"))?;
-    let cli = executable_sibling(&app, "gridcraft-cli");
+    let cli = executable_sibling(&app, cli_name(&app));
     if !cli.is_file() {
-        return Err(format!("gridcraft-cli was not found beside the app: {}. Install both binaries first.", cli.display()));
+        return Err(format!("Agent CLI was not found beside the app: {}. Install both binaries first.", cli.display()));
     }
     let path = config_path(client, global)?;
     install(&path, client, &cli, &app, port)?;
@@ -125,6 +125,10 @@ fn validate_port(port: &str) -> Result<(), String> {
         Ok(0) | Err(_) => Err("Control port must be a number from 1 to 65535.".into()),
         Ok(_) => Ok(()),
     }
+}
+
+fn cli_name(app: &Path) -> &'static str {
+    if app.file_stem().and_then(|name| name.to_str()) == Some("solidcraft") { "solidcraft-cli" } else { "gridcraft-cli" }
 }
 
 fn executable_sibling(app: &Path, name: &str) -> PathBuf {
@@ -298,6 +302,15 @@ mod tests {
         assert!(value["mcp_servers"].as_table().unwrap().get(SERVER).is_none());
         assert_eq!(value["mcp_servers"]["other"]["command"].as_str(), Some("other"));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn solidcraft_uses_its_own_cli_sibling() {
+        let app = Path::new("/opt/solidcraft");
+        let expected = if cfg!(windows) { "solidcraft-cli.exe" } else { "solidcraft-cli" };
+        assert_eq!(cli_name(app), "solidcraft-cli");
+        assert_eq!(executable_sibling(app, cli_name(app)), Path::new("/opt").join(expected));
+        assert_eq!(cli_name(Path::new("/opt/gridcraft")), "gridcraft-cli");
     }
 
     #[test]
