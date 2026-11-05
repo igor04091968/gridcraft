@@ -1,6 +1,6 @@
 # Web agent runbook
 
-> **Last updated:** 2026-11-05 · **Change:** minor (built-in HTTPS/WSS hosting and browser reconnect; Pollinations settings; guarded actions)
+> **Last updated:** 2026-11-05 · **Change:** minor (Apply confirmation and navigation to changed cells; built-in HTTPS/WSS hosting and browser reconnect; Pollinations settings; guarded actions)
 
 ## Scope
 
@@ -23,7 +23,7 @@ For browser use, build gridcraft-cli and the web distribution. Set GRIDCRAFT_CON
 
 The key must come from the provider's API platform. ChatGPT/Codex and Kimi Code subscriptions are separate from their API billing. For OpenAI, Kimi and PlusVibe, keys and endpoint overrides belong in the server service environment. Pollinations also supports a private settings file configured from the panel; the browser sends a new key only over the authenticated connection and never stores it locally. Keep the legacy GRIDCRAFT_AGENT_API_KEY, GRIDCRAFT_AGENT_BASE_URL, and GRIDCRAFT_AGENT_MODEL variables for existing OpenAI-compatible local services that call agent.run without a provider. Restart the control service after changing its environment. For remote browsers, use the [built-in HTTPS/WSS server](wss-hosting.md) or a trusted TLS reverse proxy.
 
-In **Automate → AI Agent**, connect through **Подключение веб-интерфейса**, choose a model, enter a task and run it. Legacy `?control=ws://127.0.0.1:8780&controlToken=...` URLs remain supported; the token grants workbook control, so do not publish URLs containing it. The initial response is a proposal. Review the command and arguments, then Apply or Undo. Nothing writes before Apply.
+In **Automate → AI Agent**, connect through **Подключение веб-интерфейса**, choose a model, enter a task and run it. Legacy `?control=ws://127.0.0.1:8780&controlToken=...` URLs remain supported; the token grants workbook control, so do not publish URLs containing it. The initial response is a proposal. Review the command and arguments, then select **Применить**. The proposal remains visible until the reply confirms a write; errors and no-change replies retain it. A successful reply shows the cell/range when available. **Показать изменения** closes the agent panel, selects the target sheet/range and scrolls it into view. Actions without an explicit range reveal the current selection. It refuses navigation if another workbook is active. **Отменить последнее изменение** restores the agent action; selection navigation still permits guarded Undo. Nothing writes before Apply.
 
 ## Pollinations setup from the application
 
@@ -39,9 +39,8 @@ The API endpoint is `https://gen.pollinations.ai/v1/chat/completions`. Provider 
 [public OpenAPI reference](https://gen.pollinations.ai/openapi.json), verified 2026-11-04.
 The same panel works on desktop and the web app. In the web panel, expand
 **Подключение веб-интерфейса**, enter the server WebSocket URL and control token, and click
-**Подключиться**. The token is cleared from the input and is not persisted; URLs with query
-parameters remain supported for existing deployments. Desktop starts the backend itself;
-the web app still requires `gridcraft-cli web-control` and its authenticated WebSocket.
+**Подключиться**. The token is cleared from the input. It is retained in `gridcraft.connection` only after successful authentication when **Запомнить на этом устройстве** is enabled; the next visit connects automatically. **Забыть токен** removes it. This optional browser storage is separate from provider preferences and is not encrypted. URLs with query parameters remain supported for existing deployments. Desktop starts the backend itself;
+the web app requires the authenticated WebSocket backend (`gridcraft-cli web-control --config /absolute/path/to/remote.json` for built-in HTTPS/WSS hosting, or plain `gridcraft-cli web-control` behind a TLS proxy).
 Remote browsers must use WSS, either through the built-in server or a trusted reverse proxy.
 
 Settings live in `agent.json` in the user settings directory: `$XDG_CONFIG_HOME/gridcraft`
@@ -70,12 +69,14 @@ the official Pollinations host.
 
 1. Without agent environment variables, `agent.run` returns a readable configuration error and does not modify the workbook.
 2. With a test OpenAI-compatible endpoint, a formula/value proposal appears before any write.
-3. Apply updates the captured workbook; Undo restores its previous value while preserving earlier manual edits. Repeated Apply/Undo is refused.
+3. Apply updates the captured workbook and confirms the address. Show changes reveals offscreen cells and the target sheet; Undo still restores the previous value while preserving earlier manual edits. A failed or no-change reply retains the proposal. Repeated Apply/Undo is refused.
 4. Changing the selection, sheet, window or document before Apply returns an error without a write. Editing and undoing that edit still invalidates the old revision.
 5. A manual edit after Apply makes agent Undo return an error and leaves that manual edit intact.
 6. MCP `read_range` sees the same active browser workbook.
 7. Wrong browser or MCP tokens are rejected.
 8. Reloading restores the selected provider/model from `gridcraft.agent`; that localStorage entry contains no API key or control token.
+
+Verified 2026-11-05: `cargo xtask ci` passed all ten stages (2,825 Rust tests including doctests) with the optional craft-fonts checkout. Chromium exercised the final optimized WASM through the public authenticated WSS backend in an isolated synthetic workbook: Apply wrote Z500, Show changes selected and revealed it, and Undo restored the value. Stale context and invalid parameters left the workbook intact and retained the proposal; an actual no-op column move returned `applied: false` with the distinct no-change status. No page errors occurred. These checks use controlled proposals to verify execution and feedback, rather than claiming every AI-generated task is supported. A separate live Pollinations proposal for A1 had already confirmed that generation and Apply worked before the feedback fix.
 
 ## Recovery
 
@@ -85,6 +86,7 @@ Stop `gridcraft-web-control.service` to disconnect both agent and MCP. Remove `c
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Apply retains proposals until success, distinguishes errors/no change, and offers Show changes without breaking agent Undo |
 | 2026-11-04 | minor | Built-in HTTPS/WSS hosting with owner-only desktop management; bounded concurrent browser sessions; heartbeat/reconnect without replay |
 | 2026-11-04 | minor | Pollinations key/model setup, catalog, connection check and removal in shared desktop/web panel; private backend settings and built-in desktop backend |
 | 2026-11-04 | minor | Bind proposals to workbook context; agent Undo identifies its own history step; validation errors preserve the WebSocket connection |

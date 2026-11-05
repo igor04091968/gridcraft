@@ -4,6 +4,8 @@ use serde_json::{Value as Json, json};
 
 use crate::SheetApp;
 
+#[cfg(test)]
+mod feedback_tests;
 mod remote;
 mod review;
 
@@ -32,6 +34,8 @@ pub struct AgentUi {
     next_id: u64,
     pending: HashSet<String>,
     last_applied: Option<review::AppliedAction>,
+    applying: Option<(String, Json)>,
+    last_change: Option<Json>,
 }
 
 impl AgentUi {
@@ -60,6 +64,8 @@ impl AgentUi {
         self.pending.clear();
         self.settings_requested = false;
         self.proposal = None;
+        self.applying = None;
+        self.last_change = None;
         self.configured = false;
         self.connection_status.clear();
     }
@@ -81,8 +87,18 @@ impl SheetApp {
             if let Some(id) = response.get("id").and_then(Json::as_str) {
                 self.agent.pending.remove(id);
             }
+            let applied_action = self
+                .agent
+                .applying
+                .as_ref()
+                .filter(|(id, _)| response.get("id").and_then(Json::as_str) == Some(id.as_str()))
+                .map(|(_, action)| action.clone());
+            if applied_action.is_some() {
+                self.agent.applying = None;
+            }
             if let Some(error) = response.pointer("/error/message").and_then(Json::as_str) {
-                self.agent.status = error.to_string();
+                self.agent.status =
+                    if applied_action.is_some() { format!("Не удалось применить: {error}") } else { error.to_string() };
                 self.agent.log.push(format!("Error: {error}"));
             } else if let Some(result) = response.get("result") {
                 if result.get("remoteServer") == Some(&Json::Bool(true)) || result.get("pairingToken").is_some() {
@@ -124,7 +140,32 @@ impl SheetApp {
                     self.agent.status = self.agent.connection_status.clone();
                 } else if let Some(proposal) = result.get("proposal") {
                     self.agent.proposal = Some(proposal.clone());
+                    self.agent.last_change = None;
                     self.agent.status = "Review the proposal. Nothing has changed.".into();
+                } else if let Some(applied) = result.get("applied").and_then(Json::as_bool) {
+                    if applied {
+                        let address = result
+                            .pointer("/result/cell")
+                            .or_else(|| result.pointer("/result/range"))
+                            .and_then(Json::as_str)
+                            .or_else(|| applied_action.as_ref().and_then(action_range))
+                            .filter(|address| address.len() <= 256);
+                        self.agent.status = match address {
+                            Some(address) => format!("Изменения применены: {address}."),
+                            None => "Изменения применены к книге.".into(),
+                        };
+                        if let Some(action) = applied_action {
+                            self.agent.last_change = Some(action);
+                            self.agent.proposal = None;
+                        }
+                    } else {
+                        self.agent.status = "Книга не изменилась. Проверьте команду и её параметры в предложении.".into();
+                    }
+                    self.agent.log.push(self.agent.status.clone());
+                } else if result.get("undone") == Some(&Json::Bool(true)) {
+                    self.agent.last_change = None;
+                    self.agent.status = "Изменения агента отменены.".into();
+                    self.agent.log.push(self.agent.status.clone());
                 } else {
                     self.agent.status = "Command completed.".into();
                     self.agent.log.push("Command completed.".into());
@@ -145,6 +186,36 @@ impl SheetApp {
             self.agent.status = "Подключение агента недоступно. Проверьте запуск локальной службы или подключение веб-интерфейса.".into();
         }
     }
+
+    fn apply_agent_proposal(&mut self, action: Json) {
+        self.agent_send("agent.apply", action.clone());
+        if self.services.agent_send.is_some() {
+            self.agent.applying = Some((format!("agent-{}", self.agent.next_id), action));
+        }
+    }
+
+    fn show_agent_change(&mut self) -> Result<(), String> {
+        let action = self.agent.last_change.clone().ok_or("Нет применённых изменений для просмотра.")?;
+        let doc = self.session.doc().map_err(|e| e.to_string())?;
+        if action.pointer("/context/doc").and_then(Json::as_u64) != Some(doc.uid) {
+            return Err("Изменения относятся к другой книге. Сначала откройте её.".into());
+        }
+        if let Some(range) = action_range(&action) {
+            let mut params = json!({"range": range});
+            if let Some(sheet) = action.pointer("/params/sheet").or_else(|| if range.contains('!') { None } else { action.pointer("/context/sheet") })
+            {
+                params["sheet"] = sheet.clone();
+            }
+            self.run("selection.set", params)?;
+        }
+        self.grid.ensure_visible = true;
+        self.agent.open = false;
+        Ok(())
+    }
+}
+
+fn action_range(action: &Json) -> Option<&str> {
+    action.pointer("/params/cell").or_else(|| action.pointer("/params/range")).and_then(Json::as_str)
 }
 
 pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
@@ -161,6 +232,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         app.agent_send("agent.models", json!({"provider":"pollinations"}));
     }
     let mut open = app.agent.open;
+    let mut close_after_change = false;
     egui::Window::new("AI-агент").id(egui::Id::unique("gridcraft-agent")).open(&mut open).resizable(true).default_width(480.0).show(ctx, |ui| {
         ui.label("Изменения агента требуют подтверждения");
         if app.services.agent_connect.is_none() && app.services.agent_send.is_some() {
@@ -275,14 +347,20 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 );
                 ui.horizontal(|ui| {
                     if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Применить")).clicked() {
-                        app.agent_send("agent.apply", action.clone());
-                        app.agent.proposal = None;
+                        app.apply_agent_proposal(action.clone());
                     }
-                    if ui.button("Отклонить").clicked() {
+                    if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Отклонить")).clicked() {
                         app.agent.proposal = None;
                         app.agent.status = "Предложение отклонено; ничего не изменено.".into();
                     }
                 });
+            }
+        }
+        if app.agent.last_change.is_some() && ui.button("Показать изменения").clicked() {
+            if let Err(error) = app.show_agent_change() {
+                app.agent.status = error;
+            } else {
+                close_after_change = true;
             }
         }
         if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Отменить последнее изменение")).clicked() {
@@ -295,6 +373,9 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
             }
         });
     });
+    if close_after_change {
+        open = false;
+    }
     app.agent.open = open;
     if !open {
         app.agent.remote.hide_token();
@@ -505,8 +586,9 @@ mod tests {
         assert!(sent.lock().unwrap().is_empty());
         assert!(app.agent.proposal.is_some());
 
-        let action = app.agent.proposal.take().unwrap().get("action").cloned().unwrap();
-        app.agent_send("agent.apply", action);
+        let action = app.agent.proposal.as_ref().unwrap().get("action").cloned().unwrap();
+        app.apply_agent_proposal(action);
+        assert!(app.agent.proposal.is_some());
         app.agent_send("agent.undo", json!({}));
         let requests = sent.lock().unwrap();
         assert_eq!(requests[0]["method"], "agent.apply");

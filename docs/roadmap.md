@@ -1,6 +1,6 @@
 # Roadmap detail
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-05 · **Change:** minor (optional browser pairing persistence; built-in HTTPS/WSS hosting and browser reconnect; browser recent workbook reopen; Pollinations connection settings and shared native backend; reviewed agent Apply/Undo guards; pinned XLSX corpus run, metadata and picture type fixes; test command) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-05 · **Change:** minor (Apply confirmation and navigation to changed cells; optional browser pairing persistence; built-in HTTPS/WSS hosting and browser reconnect; browser recent workbook reopen; Pollinations connection settings and shared native backend; reviewed agent Apply/Undo guards; pinned XLSX corpus run, metadata and picture type fixes; test command) · **Target:** Microsoft Excel (Microsoft 365)
 
 Forward-looking plan. The one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work
 list is [`gaps.md`](gaps.md); numbers and method are in
@@ -115,6 +115,7 @@ to check our files, and Windows machines with the reported GPU drivers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Apply retains proposals until success, distinguishes errors/no change, and offers Show changes without breaking agent Undo |
 | 2026-11-05 | minor | Optional browser pairing persistence and automatic connection after reload; explicit forgetting |
 | 2026-11-04 | minor | built-in HTTPS/WSS hosting and browser reconnect; see [WSS hosting](wss-hosting.md) |
 | 2026-11-04 | minor | Browser recent workbook reopen: IndexedDB file copies, localStorage names, preserved after reload; synthetic workbook browser check passed |
