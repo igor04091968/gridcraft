@@ -1,6 +1,6 @@
 # Web agent runbook
 
-> **Last updated:** 2026-11-05 · **Change:** minor (Apply confirmation and navigation to changed cells; built-in HTTPS/WSS hosting and browser reconnect; Pollinations settings; guarded actions)
+> **Last updated:** 2026-11-05 · **Change:** minor (Pollinations HTTP 400 diagnostics; Apply confirmation and navigation to changed cells; built-in HTTPS/WSS hosting and browser reconnect; Pollinations settings; guarded actions)
 
 ## Scope
 
@@ -78,6 +78,10 @@ the official Pollinations host.
 
 Verified 2026-11-05: `cargo xtask ci` passed all ten stages (2,825 Rust tests including doctests) with the optional craft-fonts checkout. Chromium exercised the final optimized WASM through the public authenticated WSS backend in an isolated synthetic workbook: Apply wrote Z500, Show changes selected and revealed it, and Undo restored the value. Stale context and invalid parameters left the workbook intact and retained the proposal; an actual no-op column move returned `applied: false` with the distinct no-change status. No page errors occurred. These checks use controlled proposals to verify execution and feedback, rather than claiming every AI-generated task is supported. A separate live Pollinations proposal for A1 had already confirmed that generation and Apply worked before the feedback fix.
 
+Pollinations HTTP 400 now distinguishes an invalid model/alias, a model context limit and unsupported parameters when the provider supplies a recognized reason. For an invalid model, refresh **Обновить модели**, choose a catalog entry or enter the stable `openai` alias. For a context limit, narrow the range and task. Unrecognized reasons are reported explicitly as unknown; the workbook remains unchanged. HTTP 401/403, 402 and 429 retain their separate key/permissions, balance and rate-limit messages. Error bodies are capped at 64 KiB and classified locally; raw provider messages are never forwarded because they can echo credentials or cell contents.
+
+Verified 2026-11-05: the HTTP 400 fix passed `cargo xtask ci` (all ten stages, 2,827 Rust tests including doctests). The HTTP regression test reads a real mock 400 body and then completes another request; classification tests prove that echoed credentials and workbook text do not enter replies. The updated public backend was checked in Chromium with an isolated workbook: an intentionally invalid model displayed the specific model/alias message, then the saved model generated a summary from long Russian cell text. The generated `cell.set` action applied its exact proposed text and guarded Undo restored the cell. The server used its saved API key; the browser supplied no provider key. No page errors occurred. The owner's original HTTP 400 was not reproduced with the saved model; the exact failing client model/task remains unknown.
+
 ## Recovery
 
 Stop `gridcraft-web-control.service` to disconnect both agent and MCP. Remove `control` and `controlToken` from the URL to use the standalone editor. The workbook's ordinary File → Undo remains available after an applied proposal. Server logs must not include the token, API key or full workbook contents.
@@ -86,6 +90,7 @@ Stop `gridcraft-web-control.service` to disconnect both agent and MCP. Remove `c
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Bounded Pollinations HTTP 400 response classification distinguishes invalid model, context limit and unsupported parameters without exposing echoed credentials or workbook text |
 | 2026-11-05 | minor | Apply retains proposals until success, distinguishes errors/no change, and offers Show changes without breaking agent Undo |
 | 2026-11-04 | minor | Built-in HTTPS/WSS hosting with owner-only desktop management; bounded concurrent browser sessions; heartbeat/reconnect without replay |
 | 2026-11-04 | minor | Pollinations key/model setup, catalog, connection check and removal in shared desktop/web panel; private backend settings and built-in desktop backend |

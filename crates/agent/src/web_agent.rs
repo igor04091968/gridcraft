@@ -6,6 +6,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use tungstenite::{Message, WebSocket};
 
+mod pollinations;
 mod settings;
 
 pub fn handle<S: Read + Write>(ws: &mut WebSocket<S>, request: &Value) -> Result<bool, String> {
@@ -96,13 +97,14 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     });
     let base = std::env::var(profile.base_url_env).unwrap_or_else(|_| profile.base_url.into());
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
-    let client = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(90))).build().new_agent();
-    let mut response = client
-        .post(url)
-        .header("Authorization", &format!("Bearer {key}"))
-        .send_json(body)
-        .map_err(|e| if provider == "pollinations" { settings::http_error(e) } else { format!("agent request failed: {e}") })?;
-    let value: Value = response.body_mut().with_config().limit(1024 * 1024).read_json().map_err(|e| format!("invalid agent response: {e}"))?;
+    let value: Value = if provider == "pollinations" {
+        pollinations::completion(&url, &key, &body)?
+    } else {
+        let client = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(90))).build().new_agent();
+        let mut response =
+            client.post(url).header("Authorization", &format!("Bearer {key}")).send_json(body).map_err(|e| format!("agent request failed: {e}"))?;
+        response.body_mut().with_config().limit(1024 * 1024).read_json().map_err(|e| format!("invalid agent response: {e}"))?
+    };
     let content =
         value.pointer("/choices/0/message/content").and_then(Value::as_str).ok_or_else(|| "agent response has no message content".to_string())?;
     let mut proposal = parse_proposal(content)?;
