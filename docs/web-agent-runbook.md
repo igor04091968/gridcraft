@@ -1,12 +1,14 @@
 # Web agent runbook
 
-> **Last updated:** 2026-11-05 · **Change:** minor (agent pending cell edit recovery; Pollinations Free default and labeled catalog; Pollinations HTTP 400 diagnostics; Apply confirmation and navigation to changed cells; built-in HTTPS/WSS hosting and browser reconnect; Pollinations settings; guarded actions)
+> **Last updated:** 2026-11-05 · **Change:** minor (explicit credential copy controls)
 
 ## Scope
 
 The browser agent works on the active workbook through the same authenticated control channel as MCP. The shared `gridcraft-agent` backend calls an OpenAI-compatible chat-completions endpoint. Desktop runs this backend in process on private ephemeral loopback ports; no external service is needed for normal desktop use. Browser storage never contains the API key. `agent.run` reads and proposes only; `agent.apply` executes the proposal shown to the user; `agent.undo` rolls back the last applied agent action only while it remains the latest workbook edit.
 
-This first version makes one model call and proposes at most one command. The step limit is reserved for a future multi-step loop and does not make this version iterative. There is no task-cancellation button: closing the panel does not stop a request already running on the server. Apply accepts only `cell.set`, `range.setValues`, `home.bold`, `home.italic`, `home.underline`, `home.mergeCells` and `sheet.moveColumns`; the server validates the command and required move parameters rather than trusting browser JSON. Moving L before K uses `cols: "L:L", before: 10` (zero-based destination boundary).
+The agent makes a bounded sequence of model calls. It may request read-only inspections of A1 ranges on the active sheet (up to 5,000 cells each) before returning an answer or proposing one command. The configured step limit (1–20) bounds the loop, including a single retry after malformed or empty model output. Inspection results are capped to 60,000 characters in total. A final proposal includes the inspected ranges; no write occurs until the user selects Apply. Apply accepts only `cell.set`, `range.setValues`, `home.bold`, `home.italic`, `home.underline`, `home.mergeCells` and `sheet.moveColumns`; the server validates the command and required move parameters rather than trusting browser JSON. Moving L before K uses `cols: "L:L", before: 10` (zero-based destination boundary).
+
+Inspections only read the active sheet. The agent does not query Memora or other MCP servers, and it cannot switch sheets during one task; provide relevant external facts in the task or select the target sheet first. There is no task-cancellation button: closing the panel does not stop a request already running on the server.
 
 Every proposal is bound to the open document UID, revision, window, active sheet and full selection captured together with the workbook data. Apply checks that context in the same UI pass that executes the command; any intervening edit or navigation to a different context requires a new proposal. An unfinished cell edit or open undo group blocks snapshot/apply. Context is supplied by GridCraft, never by the model.
 
@@ -49,7 +51,11 @@ Settings live in `agent.json` in the user settings directory: `$XDG_CONFIG_HOME/
 (or `~/.config/gridcraft`) on Linux/BSD, `~/Library/Application Support/GridCraft` on macOS,
 and `%APPDATA%/GridCraft` on Windows. Unix files are created with mode 0600, existing access
 restrictions are retained, symlink/non-private/oversized files are refused on read, and keys
-never appear in RPC responses or UI/browser preference JSON. This is private file storage,
+never appear in normal RPC responses or UI/browser preference JSON. The settings menu has an
+explicit authenticated `agent.copyKey` action for copying a configured provider key; its UI
+holds the result only in a masked transient field, clears it when hidden, closed or disconnected,
+and never writes it to the log or preferences. Draft keys, connection tokens, server addresses
+and remote server values have separate copy controls. This is private file storage,
 not OS-keychain encryption. `GRIDCRAFT_AGENT_CONFIG_PATH` selects an explicit backend path.
 `GRIDCRAFT_AGENT_POLLINATIONS_API_KEY` remains an optional environment fallback; removing the
 saved key does not remove a separately configured environment key.
@@ -77,6 +83,7 @@ the official Pollinations host.
 6. MCP `read_range` sees the same active browser workbook.
 7. Wrong browser or MCP tokens are rejected.
 8. Reloading restores the selected provider/model from `gridcraft.agent`; that localStorage entry contains no API key or control token.
+9. A bounded inspect request reads the requested active-sheet A1 range, then asks the model to continue; invalid ranges and failed reads do not write to the workbook. Empty or malformed model output receives one bounded correction attempt and otherwise yields a clear error.
 
 Verified 2026-11-05: `cargo xtask ci` passed all ten stages (2,825 Rust tests including doctests) with the optional craft-fonts checkout. Chromium exercised the final optimized WASM through the public authenticated WSS backend in an isolated synthetic workbook: Apply wrote Z500, Show changes selected and revealed it, and Undo restored the value. Stale context and invalid parameters left the workbook intact and retained the proposal; an actual no-op column move returned `applied: false` with the distinct no-change status. No page errors occurred. These checks use controlled proposals to verify execution and feedback, rather than claiming every AI-generated task is supported. A separate live Pollinations proposal for A1 had already confirmed that generation and Apply worked before the feedback fix.
 
@@ -96,6 +103,7 @@ Verified 2026-11-05: the pending-edit fix passed all ten `cargo xtask ci` stages
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Bounded active-sheet inspection loop, step and data caps, one retry for malformed model output, and visible inspected ranges; writes still require Apply |
 | 2026-11-05 | minor | Agent panel explicitly saves or cancels a pending cell draft before a request; rejected input and open operations preserve drafts/tasks and do not contact AI |
 | 2026-11-05 | minor | Pollinations defaults to Free Glyph Cluster; live catalog retains paid models, sorts Free first and marks specialized moderation models |
 | 2026-11-05 | minor | Bounded Pollinations HTTP 400 response classification distinguishes invalid model, context limit and unsupported parameters without exposing echoed credentials or workbook text |

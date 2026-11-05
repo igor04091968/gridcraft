@@ -1,6 +1,6 @@
 # Built-in HTTPS and WSS hosting
 
-> **Last updated:** 2026-11-05 · **Change:** minor (M14.4)
+> **Last updated:** 2026-11-06 · **Change:** minor (agent clipboard controls deployment)
 
 GridCraft can serve its WASM application and agent WebSocket on the same native Rust TLS
 listener. Python and a reverse proxy are not needed in this mode. The web page is at the
@@ -122,6 +122,15 @@ The public port was blocked by UFW, not a missing router mapping. The only added
 rule is `ufw allow 443/tcp comment 'GridCraft HTTPS WSS'`; public HTTPS `/health` returns
 200 with normal certificate validation. No VPN or default route was changed.
 
+On 2026-11-05, the bounded AI inspect-and-propose workflow and explicit agent credential-copy
+controls were deployed. The web index switches to new hashed WASM assets atomically; older
+hashed assets remain available. The `gridcraft-cli-wss` binary was replaced and
+`gridcraft-https.service` restarted; browser clients reconnect automatically. `/health`, the
+index, JavaScript and WASM downloads returned success. The latest rollback copy is
+`dist/deploy-backups/20261105T203553Z-agent-clipboard/`; it contains the prior web distribution
+and binary. The earlier inspect-loop rollback remains under
+`dist/deploy-backups/20261105T195610Z-agent-inspect/`.
+
 Rollback: stop and disable `gridcraft-https.service`, delete the added UFW 443 rule (`sudo ufw delete allow 443/tcp`), restore the web/binary copies from
 `dist/deploy-backups/20261104T204033Z-wss/`, and restart the previous web-control service.
 The former HTTP 8080 editor remains available; HTTPS is a separate browser origin and
@@ -158,6 +167,8 @@ cover endpoint binding, separation from provider preferences and oversized/corru
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-06 | minor | Agent clipboard controls deployed; latest rollback copy includes old web assets and server binary |
+| 2026-11-05 | minor | Deployed bounded AI inspect-and-propose workflow with atomic web index replacement and binary rollback copy |
 | 2026-11-05 | minor | Optional browser pairing persistence, automatic connection after reload and explicit forgetting |
 | 2026-11-05 | minor | Verified notebook deployment, renewed certificate, automatic TLS synchronization and public trusted WSS |
 | 2026-11-04 | minor | Built-in single-origin HTTPS/WSS server, desktop settings, isolated browser channels, reconnect and operational bounds |

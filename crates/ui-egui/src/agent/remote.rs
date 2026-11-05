@@ -74,10 +74,17 @@ pub(super) fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         ui.label(if remote.running { "Сервер работает" } else { "Сервер остановлен" });
         ui.label(format!("Подключений: {}", remote.clients));
         ui.add_enabled_ui(!remote.running, |ui| {
-            for (label, field) in [("Слушать IP:порт", &mut remote.listen), ("Адрес HTTPS", &mut remote.origin),
-                ("Папка веб-приложения", &mut remote.directory), ("Сертификат PEM", &mut remote.certificate),
-                ("Закрытый ключ PEM", &mut remote.private_key)] {
-                ui.horizontal(|ui| { let label = ui.label(label); ui.text_edit_singleline(field).labelled_by(label.id); });
+            for (label_text, field, secret) in [("Слушать IP:порт", &mut remote.listen, false), ("Адрес HTTPS", &mut remote.origin, false),
+                ("Папка веб-приложения", &mut remote.directory, false), ("Сертификат PEM", &mut remote.certificate, false),
+                ("Закрытый ключ PEM", &mut remote.private_key, true)] {
+                ui.horizontal(|ui| {
+                    let label = ui.label(label_text);
+                    ui.add(egui::TextEdit::singleline(field).password(secret)).labelled_by(label.id);
+                    if ui.add_enabled(!field.is_empty(), egui::Button::new("Копировать")).clicked() {
+                        ui.ctx().copy_text(field.clone());
+                        app.agent.status = "Значение скопировано в буфер обмена.".into();
+                    }
+                });
             }
             ui.checkbox(&mut remote.autostart, "Запускать при открытии GridCraft");
         });

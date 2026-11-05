@@ -1,6 +1,6 @@
 # Target-app parity: GridCraft vs Microsoft Excel
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-04 · **Change:** minor (Pollinations connection settings and shared native backend; reviewed in-app agent context/Undo guards; pinned external XLSX corpus: 78 files, round-trip differing 26 → 0; core metadata preserved; no score change; automation: macro interface; earlier: catalog count 276 / 292, as `cargo xtask parity` measures; automation: typed macros in the engine; several windows: a native window per workbook window, New Window on the same workbook, Arrange All; no score change) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-05 · **Change:** minor (bounded agent inspection loop before reviewed action; no readiness score change) · **Target:** Microsoft Excel (Microsoft 365)
 
 This is the authoritative parity assessment. [`ROADMAP.md`](../ROADMAP.md) summarizes it,
 [`gaps.md`](gaps.md) lists every shortfall, and the area checklists hold the detail:
@@ -244,9 +244,10 @@ Linux, BSD and RISC-V, where Excel doesn't run.
 - **AI:** Excel has Copilot, the COPILOT() function, Analyze Data, Python in Excel and Flash
   Fill. GridCraft has Flash Fill and agent control (any MCP client can drive every
   command headless or live). The current working tree also has a server-backed in-app panel:
-  one model call, one reviewed command, workbook-context checks before Apply and a guarded
-  agent Undo. Full model/UI E2E, request cancellation and a multi-step loop remain unverified
-  or missing; there is no Analyze Data equivalent. These changes do not establish a new readiness score.
+  bounded read-only inspection of active-sheet ranges, one reviewed command, workbook-context
+  checks before Apply and a guarded agent Undo. Request cancellation, multi-action workflows,
+  Memora access and full model/UI E2E remain unverified or missing; there is no Analyze Data
+  equivalent. These changes do not establish a new readiness score.
   See [web-agent-runbook.md](web-agent-runbook.md).
 
 ## Stage
@@ -345,6 +346,7 @@ The inventory carried over from the 2026-10-07 ROADMAP.md, updated for what land
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Bounded active-sheet inspection loop before one reviewed AI action; no readiness score change |
 | 2026-11-04 | minor | Pollinations connection settings, model catalog, key removal and auth check in desktop/web panel; built-in native backend; no readiness score change |
 | 2026-11-04 | minor | In-cell picture rich-value types verified on all 78 pinned XLSX: round-trip differences 2 → 0; cached VLOOKUP mismatch and Excel verification remain |
 | 2026-11-04 | minor | Describe in-app agent working-tree implementation and context/Undo guards; no score change |

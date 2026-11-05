@@ -1,6 +1,6 @@
 # Architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-05 · **Change:** minor (built-in HTTPS/WSS server, isolated browser channels and reconnection; shared native agent backend and Pollinations connection settings) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-05 · **Change:** minor (bounded agent inspect-and-propose loop; built-in HTTPS/WSS server, isolated browser channels and reconnection; shared native agent backend and Pollinations connection settings) · **Target:** Microsoft Excel (Microsoft 365)
 
 How GridCraft is built today. Rules for contributors are in [`AGENTS.md`](../AGENTS.md).
 
@@ -152,6 +152,9 @@ macros as chunked hidden names (`_gc_macro_<n>_<k>`: macro `n`, chunk `k`).
   stay in the native backend. Pollinations keys can be configured through the panel and are
   saved in a private `agent.json`, with only non-secret status returned to the UI. Desktop starts
   an in-process backend on private ephemeral loopback ports; web uses the CLI-hosted backend. See [web-agent-runbook.md](web-agent-runbook.md).
+- Agent requests may perform bounded, read-only inspections of A1 ranges on the active sheet before
+  proposing one reviewed command. Step count, range size and total inspected text are capped; the
+  agent cannot save, switch sheets, query Memora, or apply a write before user confirmation.
 
 The optional native remote host (`crates/agent/src/remote.rs`) serves static WASM assets and
 `/agent/ws` on one rustls HTTPS listener. Each authenticated browser has a separate workbook
@@ -177,6 +180,7 @@ rpm, tarball), FreeBSD, and web (WASM; WebGPU or WebGL2). Release workflows in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Bounded agent inspect-and-propose loop; writes remain user-reviewed |
 | 2026-11-04 | minor | built-in HTTPS/WSS server, isolated browser channels and reconnection; see [WSS hosting](wss-hosting.md) |
 | 2026-11-04 | minor | L6 agent backend shared by desktop and CLI; Pollinations connection settings stored privately; browser keeps only selection |
 | 2026-11-04 | minor | Shared native/WASM context checks and guarded agent Undo |

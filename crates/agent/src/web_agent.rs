@@ -11,7 +11,10 @@ mod settings;
 
 pub fn handle<S: Read + Write>(ws: &mut WebSocket<S>, request: &Value) -> Result<bool, String> {
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
-    if !matches!(method, "agent.run" | "agent.apply" | "agent.undo" | "agent.settings" | "agent.configure" | "agent.models" | "agent.test") {
+    if !matches!(
+        method,
+        "agent.run" | "agent.apply" | "agent.undo" | "agent.settings" | "agent.configure" | "agent.models" | "agent.test" | "agent.copyKey"
+    ) {
         return Ok(false);
     }
     let id = request.get("id").cloned().unwrap_or(Value::Null);
@@ -19,6 +22,7 @@ pub fn handle<S: Read + Write>(ws: &mut WebSocket<S>, request: &Value) -> Result
     let result = match method {
         "agent.run" => propose(ws, &params),
         "agent.settings" | "agent.configure" | "agent.models" | "agent.test" => settings::handle(method, &params),
+        "agent.copyKey" => copy_provider_key(&params),
         "agent.apply" => apply(ws, params),
         "agent.undo" => call_browser(ws, 9003, "agent.undoReviewed", json!({})),
         _ => return Ok(false),
@@ -29,6 +33,22 @@ pub fn handle<S: Read + Write>(ws: &mut WebSocket<S>, request: &Value) -> Result
     };
     ws.send(Message::text(response.to_string())).map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+/// Return one explicitly requested provider credential to the authenticated settings UI.
+/// This method is never called by model requests and its response must not be logged.
+fn copy_provider_key(params: &Value) -> Result<Value, String> {
+    let provider = params.get("provider").and_then(Value::as_str).ok_or("Provider is required.")?;
+    let key = if provider == "pollinations" {
+        settings::Settings::load()?.key()?
+    } else {
+        let profile = ProviderProfile::for_name(provider)?;
+        if !matches!(provider, "openai" | "kimi" | "deepseek") {
+            return Err("This provider key cannot be copied here.".into());
+        }
+        env(profile.api_key_env)?
+    };
+    Ok(json!({"copiedKey":key,"provider":provider}))
 }
 
 fn apply<S: Read + Write>(ws: &mut WebSocket<S>, mut action: Value) -> Result<Value, String> {
@@ -84,36 +104,126 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     }
     let snapshot = call_browser(ws, 9000, "agent.snapshot", read_params)?;
     let expected = snapshot.get("context").filter(|value| value.is_object()).ok_or("workbook snapshot has no context")?.clone();
-    let context = serde_json::to_string(&json!({"workbook": snapshot.get("workbook"), "range": snapshot.get("range")})).map_err(|e| e.to_string())?;
-    let context: String = context.chars().take(100_000).collect();
-    let system = "You are GridCraft's spreadsheet agent. Return ONLY a JSON object with keys summary (string), action (null or {command, params}), and undo (string). Propose at most one safe engine command. Use cell.set for one cell or range.setValues for a rectangular 2-D array. To merge selected cells, use home.mergeCells with range set to an A1 reference such as A1:B2; use the exact range from the workbook context, or omit range to act on the current selection. To move whole columns, use sheet.moveColumns with cols as an A1 whole-column range and before as a zero-based boundary; moving L before K uses cols L:L and before 10. Propose one command per request; when a task asks for multiple changes, state which change you are proposing first. Never send an empty range. Never propose file.save, file.open, app.quit, macros or external links. If analysis without changes answers the task, action is null. The user reviews every action before execution.";
-    let body = json!({
-        "model": model,
-        "max_completion_tokens": 1500,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": format!("Task: {task}\nWorkbook context: {context}")}
-        ]
-    });
     let base = std::env::var(profile.base_url_env).unwrap_or_else(|_| profile.base_url.into());
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
-    let value: Value = if provider == "pollinations" {
-        pollinations::completion(&url, &key, &body)?
-    } else {
-        let client = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(90))).build().new_agent();
-        let mut response =
-            client.post(url).header("Authorization", &format!("Bearer {key}")).send_json(body).map_err(|e| format!("agent request failed: {e}"))?;
-        response.body_mut().with_config().limit(1024 * 1024).read_json().map_err(|e| format!("invalid agent response: {e}"))?
-    };
-    let content =
-        value.pointer("/choices/0/message/content").and_then(Value::as_str).ok_or_else(|| "agent response has no message content".to_string())?;
-    let mut proposal = parse_proposal(content)?;
-    validate_action(&proposal)?;
-    // The model cannot supply or replace the context captured before its request.
-    if let Some(action) = proposal.get_mut("action").and_then(Value::as_object_mut) {
-        action.insert("context".into(), expected);
+    let system = "You are GridCraft's spreadsheet agent. Return exactly one JSON object per turn: {\"summary\":string,\"inspect\":null|{\"range\":\"A1:B8\"},\"action\":null|{\"command\":string,\"params\":object},\"undo\":string}. Use inspect to request a bounded read of the ACTIVE sheet before deciding; the next turn will contain that range's values. You may inspect multiple ranges, one per turn, within the supplied step budget. Never inspect whole rows/columns or more than 5000 cells at once. When ready, set inspect:null and return either one action or action:null. Propose at most one safe engine command. Use cell.set for one cell or range.setValues for a rectangular 2-D array. To merge cells, use home.mergeCells with an A1 range; omit range only to use the current selection. To move whole columns, use sheet.moveColumns with cols as an A1 whole-column range and before as a zero-based boundary. Never send an empty range. Never propose file.save, file.open, app.quit, macros or external links. The user reviews every action before execution. Never claim an action was applied or verified; GridCraft will apply and verify it separately.";
+    let initial = serde_json::to_string(&json!({"task": task, "workbook": snapshot.get("workbook"), "range": snapshot.get("range")}))
+        .map_err(|e| e.to_string())?;
+    let initial: String = initial.chars().take(60_000).collect();
+    let mut messages = vec![json!({"role":"system","content":system}), json!({"role":"user","content":initial})];
+    let mut inspections = Vec::new();
+    let mut inspected_chars = 0usize;
+    let mut repair_used = false;
+
+    for step in 0..steps {
+        let body = json!({"model":model,"max_completion_tokens":1800,"messages":messages.clone()});
+        let value = complete(provider, &url, &key, body)?;
+        let content = message_content(&value);
+        let content = content.as_deref().unwrap_or("");
+        let mut proposal = match parse_proposal(content) {
+            Ok(proposal) => proposal,
+            Err(error) if !repair_used && step + 1 < steps => {
+                repair_used = true;
+                messages.push(json!({"role":"assistant","content":content}));
+                messages.push(json!({"role":"user","content":format!("Your previous response was unusable ({error}). Return a complete, non-empty JSON object matching the required schema. Do not use tools or markdown fences.")}));
+                continue;
+            }
+            Err(_) => return Err("Модель не вернула корректный ответ после повторного запроса. Книга не изменена; отправьте задачу ещё раз или выберите другую модель.".into()),
+        };
+        validate_proposal(&proposal)?;
+
+        if let Some(inspect) = proposal.get("inspect").filter(|value| !value.is_null()) {
+            if step + 1 >= steps {
+                return Err("Агенту не хватило шагов для анализа. Увеличьте лимит шагов и повторите задачу.".into());
+            }
+            let range = match inspection_range(inspect) {
+                Ok(range) => range,
+                Err(error) if step + 1 < steps => {
+                    messages.push(json!({"role":"assistant","content":content}));
+                    messages.push(json!({"role":"user","content":format!("Inspection request rejected: {error}. Choose a smaller valid A1 range on the active sheet.")}));
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            let observed = match call_browser(ws, 9000, "agent.snapshot", json!({"range": range})) {
+                Ok(observed) => observed,
+                Err(error) if step + 1 < steps => {
+                    messages.push(json!({"role":"assistant","content":content}));
+                    messages.push(json!({"role":"user","content":format!("Read-only inspection failed: {error}. Try a smaller range or finish with the evidence already available.")}));
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            if observed.get("context") != Some(&expected) {
+                return Err("Открытая книга или выделение изменились во время анализа. Запустите задачу заново.".into());
+            }
+            inspections.push(json!({"range":range,"summary":proposal.get("summary").cloned().unwrap_or(Value::Null)}));
+            let observation = serde_json::to_string(&json!({"range":range,"data":observed.get("range")})).map_err(|e| e.to_string())?;
+            let remaining = 60_000usize.saturating_sub(inspected_chars);
+            if remaining == 0 {
+                return Err("Агент исчерпал лимит данных для анализа. Сузьте диапазоны и повторите задачу.".into());
+            }
+            let bounded_observation: String = observation.chars().take(remaining.min(24_000)).collect();
+            inspected_chars = inspected_chars.saturating_add(bounded_observation.chars().count());
+            messages.push(json!({"role":"assistant","content":content}));
+            messages.push(json!({"role":"user","content":format!("Read-only inspection result for {range}: {bounded_observation}{} Continue using this evidence.", if bounded_observation.len() < observation.len() { " [data truncated]" } else { "" })}));
+            continue;
+        }
+
+        validate_action(&proposal)?;
+        // The model cannot supply or replace the context captured before its request.
+        if let Some(action) = proposal.get_mut("action").and_then(Value::as_object_mut) {
+            action.insert("context".into(), expected);
+        }
+        return Ok(
+            json!({"proposal":proposal,"provider":provider,"model":model,"maxSteps":steps,"stepsUsed":step + 1,"inspections":inspections,"applied":false}),
+        );
     }
-    Ok(json!({"proposal": proposal, "provider": provider, "model": model, "maxSteps": steps, "applied": false}))
+    Err("Агент достиг лимита шагов до подготовки предложения. Увеличьте лимит и повторите задачу.".into())
+}
+
+fn complete(provider: &str, url: &str, key: &str, body: Value) -> Result<Value, String> {
+    if provider == "pollinations" {
+        return pollinations::completion(url, key, &body);
+    }
+    let client = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(90))).build().new_agent();
+    let mut response =
+        client.post(url).header("Authorization", &format!("Bearer {key}")).send_json(body).map_err(|e| format!("agent request failed: {e}"))?;
+    response.body_mut().with_config().limit(1024 * 1024).read_json().map_err(|e| format!("invalid agent response: {e}"))
+}
+
+fn message_content(response: &Value) -> Option<String> {
+    let content = response.pointer("/choices/0/message/content")?;
+    match content {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(parts) => {
+            let text = parts.iter().filter_map(|part| part.get("text").and_then(Value::as_str)).collect::<Vec<_>>().join("\n");
+            (!text.is_empty()).then_some(text)
+        }
+        _ => None,
+    }
+}
+
+fn validate_proposal(proposal: &Value) -> Result<(), String> {
+    if proposal.get("summary").and_then(Value::as_str).is_none() {
+        return Err("agent proposal has no summary".into());
+    }
+    if proposal.get("inspect").is_some_and(|inspect| !inspect.is_null()) && proposal.get("action").is_some_and(|action| !action.is_null()) {
+        return Err("agent response cannot inspect and propose a write in the same step".into());
+    }
+    Ok(())
+}
+
+fn inspection_range(inspect: &Value) -> Result<&str, String> {
+    let range = inspect.get("range").and_then(Value::as_str).filter(|range| !range.trim().is_empty()).ok_or("inspection needs an A1 range")?;
+    if range.len() > 128 || range.contains('!') {
+        return Err("inspection range must be an A1 range on the active sheet (128 characters maximum)".into());
+    }
+    let parsed = gridcraft_engine::core::RangeRef::parse(range).ok_or("inspection range is not a valid A1 range")?;
+    if parsed.is_full_rows() || parsed.is_full_cols() || parsed.count() > 5_000 {
+        return Err("inspection is limited to 5000 cells; request a smaller range".into());
+    }
+    Ok(range)
 }
 
 struct ProviderProfile {
@@ -325,6 +435,12 @@ mod tests {
         assert_eq!(pollinations.api_key_env, "GRIDCRAFT_AGENT_POLLINATIONS_API_KEY");
         assert_eq!(pollinations.default_model, "stealth/glyph-cluster");
         assert!(ProviderProfile::for_name("https://attacker.example").is_err());
+    }
+
+    #[test]
+    fn copy_key_endpoint_refuses_legacy_provider() {
+        assert_eq!(copy_provider_key(&json!({"provider":"legacy"})).unwrap_err(), "This provider key cannot be copied here.");
+        assert!(copy_provider_key(&json!({"provider":"unknown"})).is_err());
     }
 
     #[test]

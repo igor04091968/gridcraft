@@ -40,11 +40,15 @@ pub struct AgentUi {
     pub max_steps: u32,
     pub status: String,
     pub proposal: Option<Json>,
+    pub inspections: Vec<String>,
     pub log: Vec<String>,
     pub api_key_input: String,
     pub models: Vec<AgentModel>,
     pub configured: bool,
     pub connection_status: String,
+    /// Present only after the user explicitly requests a saved key; never persisted or logged.
+    revealed_key: String,
+    revealed_provider: String,
     pub control_url: String,
     pub control_token_input: String,
     pub remember_control_token: bool,
@@ -88,10 +92,13 @@ impl AgentUi {
         self.pending.clear();
         self.settings_requested = false;
         self.proposal = None;
+        self.inspections.clear();
         self.applying = None;
         self.last_change = None;
         self.configured = false;
         self.connection_status.clear();
+        self.revealed_key.clear();
+        self.revealed_provider.clear();
     }
 
     pub fn new() -> Self {
@@ -125,7 +132,12 @@ impl SheetApp {
                     if applied_action.is_some() { format!("Не удалось применить: {error}") } else { error.to_string() };
                 self.agent.log.push(format!("Error: {error}"));
             } else if let Some(result) = response.get("result") {
-                if result.get("remoteServer") == Some(&Json::Bool(true)) || result.get("pairingToken").is_some() {
+                if let (Some(key), Some(provider)) = (result.get("copiedKey").and_then(Json::as_str), result.get("provider").and_then(Json::as_str)) {
+                    self.agent.revealed_key.clear();
+                    self.agent.revealed_key.push_str(key);
+                    self.agent.revealed_provider = provider.to_owned();
+                    self.agent.status = "Ключ загружен в поле настроек. Нажмите «Копировать» или «Скрыть» после проверки.".into();
+                } else if result.get("remoteServer") == Some(&Json::Bool(true)) || result.get("pairingToken").is_some() {
                     self.agent.remote.receive(result);
                     self.agent.status = "Настройки удалённого доступа обновлены.".into();
                 } else if result.get("bridgeConnected") == Some(&Json::Bool(true)) {
@@ -161,7 +173,23 @@ impl SheetApp {
                 } else if let Some(proposal) = result.get("proposal") {
                     self.agent.proposal = Some(proposal.clone());
                     self.agent.last_change = None;
-                    self.agent.status = "Review the proposal. Nothing has changed.".into();
+                    self.agent.inspections = result
+                        .get("inspections")
+                        .and_then(Json::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|item| {
+                            let range = item.get("range").and_then(Json::as_str)?;
+                            let summary = item.get("summary").and_then(Json::as_str).unwrap_or("проверка данных");
+                            Some(format!("{range}: {summary}"))
+                        })
+                        .take(20)
+                        .collect();
+                    self.agent.status = if self.agent.inspections.is_empty() {
+                        "Предложение готово. Книга не изменена.".into()
+                    } else {
+                        format!("Предложение готово после {} проверок диапазонов. Книга не изменена.", self.agent.inspections.len())
+                    };
                 } else if let Some(applied) = result.get("applied").and_then(Json::as_bool) {
                     if applied {
                         let address = result
@@ -238,6 +266,7 @@ impl SheetApp {
             return;
         }
         let task = self.agent.task.clone();
+        self.agent.inspections.clear();
         self.agent.log.push(format!("Задача: {task}"));
         self.agent_send(
             "agent.run",
@@ -294,10 +323,18 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 ui.horizontal(|ui| {
                     let label = ui.label("Адрес сервера");
                     ui.text_edit_singleline(&mut app.agent.control_url).labelled_by(label.id);
+                    if ui.button("Копировать").clicked() {
+                        ui.ctx().copy_text(app.agent.control_url.clone());
+                        app.agent.status = "Адрес сервера скопирован.".into();
+                    }
                 });
                 ui.horizontal(|ui| {
                     let label = ui.label("Токен подключения");
                     ui.add(egui::TextEdit::singleline(&mut app.agent.control_token_input).password(true)).labelled_by(label.id);
+                    if ui.add_enabled(!app.agent.control_token_input.is_empty(), egui::Button::new("Копировать")).clicked() {
+                        ui.ctx().copy_text(app.agent.control_token_input.clone());
+                        app.agent.status = "Токен подключения скопирован.".into();
+                    }
                 });
                 ui.checkbox(&mut app.agent.remember_control_token, "Запомнить на этом устройстве")
                     .on_hover_text("Сохранить токен в этом браузере и подключаться после открытия страницы. «Забыть токен» удаляет сохранение.");
@@ -346,9 +383,12 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         if provider_changed {
             app.agent.settings_requested = false;
             app.agent.api_key_input.clear();
+            app.agent.revealed_key.clear();
+            app.agent.revealed_provider.clear();
             app.agent.models.clear();
             app.agent.connection_status.clear();
             app.agent.proposal = None;
+            app.agent.inspections.clear();
             app.agent.model = match app.agent.provider.as_str() {
                 "kimi" => "kimi-k3.1-pro".into(),
                 "deepseek" => "deepseek-v4-flash-0731:free".into(),
@@ -364,11 +404,22 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         if app.agent.provider == "pollinations" {
             show_pollinations_settings(app, ui);
         } else {
-            ui.small(match app.agent.provider.as_str() {
+            let key_label = match app.agent.provider.as_str() {
                 "kimi" => "Ключ на сервере: GRIDCRAFT_AGENT_KIMI_API_KEY",
                 "deepseek" => "PlusVibe API · ключ только на сервере: GRIDCRAFT_AGENT_PLUSVIBE_API_KEY",
                 _ => "Ключ на сервере: GRIDCRAFT_AGENT_OPENAI_API_KEY",
+            };
+            ui.small(key_label);
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Показать сохранённый ключ").clicked() {
+                    app.agent_send("agent.copyKey", json!({"provider":app.agent.provider}));
+                }
+                if ui.button("Копировать сведения").clicked() {
+                    ui.ctx().copy_text(format!("Провайдер: {}; модель: {}; {}", app.agent.provider, app.agent.model, key_label));
+                    app.agent.status = "Сведения скопированы.".into();
+                }
             });
+            show_revealed_key(app, ui, &app.agent.provider.clone());
         }
         ui.horizontal(|ui| {
             let label = ui.label("Диапазон (необязательно)");
@@ -394,6 +445,9 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         ui.separator();
         ui.label(&app.agent.status);
         if let Some(proposal) = app.agent.proposal.clone() {
+            for inspection in &app.agent.inspections {
+                ui.small(format!("Проверено: {inspection}"));
+            }
             if let Some(summary) = proposal.get("summary").and_then(Json::as_str) {
                 ui.label(summary);
             }
@@ -444,6 +498,9 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
     app.agent.open = open;
     if !open {
         app.agent.remote.hide_token();
+        app.agent.revealed_key.clear();
+        app.agent.revealed_provider.clear();
+        app.agent.api_key_input.clear();
     }
 }
 
@@ -461,7 +518,21 @@ fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
                 "Введите ключ Pollinations"
             }))
             .labelled_by(label.id);
+            if ui.add_enabled(!app.agent.api_key_input.is_empty(), egui::Button::new("Копировать введённый ключ")).clicked() {
+                ui.ctx().copy_text(app.agent.api_key_input.clone());
+                app.agent.status = "Введённый ключ скопирован.".into();
+            }
         });
+        ui.horizontal_wrapped(|ui| {
+            if app.agent.configured && ui.button("Показать сохранённый ключ").clicked() {
+                app.agent_send("agent.copyKey", json!({"provider":"pollinations"}));
+            }
+            if ui.button("Копировать сведения").clicked() {
+                ui.ctx().copy_text(format!("Провайдер: Pollinations; модель: {}; API: https://gen.pollinations.ai/v1", app.agent.model));
+                app.agent.status = "Сведения скопированы.".into();
+            }
+        });
+        show_revealed_key(app, ui, "pollinations");
         ui.hyperlink_to("Получить API-ключ", "https://enter.pollinations.ai");
         ui.small("Ключ сохраняется на стороне приложения или сервера. В браузере сохраняется только выбор модели.");
         if !app.agent.models.is_empty() {
@@ -494,6 +565,24 @@ fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
             }
         });
         ui.label(&app.agent.connection_status);
+    });
+}
+
+fn show_revealed_key(app: &mut SheetApp, ui: &mut egui::Ui, provider: &str) {
+    if app.agent.revealed_key.is_empty() || app.agent.revealed_provider != provider {
+        return;
+    }
+    ui.horizontal(|ui| {
+        let label = ui.label("Сохранённый ключ");
+        ui.add(egui::TextEdit::singleline(&mut app.agent.revealed_key).password(true).interactive(false)).labelled_by(label.id);
+        if ui.button("Копировать").clicked() {
+            ui.ctx().copy_text(app.agent.revealed_key.clone());
+            app.agent.status = "Сохранённый ключ скопирован в буфер обмена.".into();
+        }
+        if ui.button("Скрыть").clicked() {
+            app.agent.revealed_key.clear();
+            app.agent.revealed_provider.clear();
+        }
     });
 }
 
@@ -598,6 +687,21 @@ mod tests {
         app.poll_agent();
         assert_eq!(app.agent.proposal, Some(proposal));
         assert!(app.agent.configured);
+    }
+
+    #[test]
+    fn explicitly_requested_key_is_temporary_and_never_logged_or_persisted() {
+        let inbox = Arc::new(Mutex::new(Vec::new()));
+        let mut app = SheetApp::new(gridcraft_engine::Session::new(), Services { agent_inbox: Some(Arc::clone(&inbox)), ..Default::default() });
+        app.agent.provider = "pollinations".into();
+        inbox.lock().unwrap().push(json!({"id":"agent-1", "result":{"provider":"pollinations", "copiedKey":"synthetic-secret"}}));
+        app.poll_agent();
+        assert_eq!(app.agent.revealed_key, "synthetic-secret");
+        assert_eq!(app.agent.revealed_provider, "pollinations");
+        assert!(!app.agent.preferences().to_string().contains("synthetic-secret"));
+        assert!(!app.agent.log.iter().any(|line| line.contains("synthetic-secret")));
+        app.agent.reset_connection();
+        assert!(app.agent.revealed_key.is_empty());
     }
 
     #[test]
