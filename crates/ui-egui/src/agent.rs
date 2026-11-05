@@ -9,6 +9,27 @@ mod feedback_tests;
 mod remote;
 mod review;
 
+const POLLINATIONS_DEFAULT_MODEL: &str = "stealth/glyph-cluster";
+
+pub struct AgentModel {
+    name: String,
+    label: String,
+}
+
+impl AgentModel {
+    fn from_catalog(model: &Json) -> Option<Self> {
+        let name = model.get("name")?.as_str().filter(|name| valid_model(name))?.to_string();
+        let title = model.get("title").and_then(Json::as_str).unwrap_or(&name).chars().take(160).collect::<String>();
+        let cost = match model.get("cost").and_then(Json::as_str) {
+            Some("free") => "Free",
+            Some("paid") => "Платная",
+            _ => "Цена неизвестна",
+        };
+        let specialized = if model.get("specialized") == Some(&Json::Bool(true)) { " · специализированная" } else { "" };
+        Some(Self { label: format!("{title} · {cost}{specialized} ({name})"), name })
+    }
+}
+
 #[derive(Default)]
 pub struct AgentUi {
     pub open: bool,
@@ -21,7 +42,7 @@ pub struct AgentUi {
     pub proposal: Option<Json>,
     pub log: Vec<String>,
     pub api_key_input: String,
-    pub models: Vec<String>,
+    pub models: Vec<AgentModel>,
     pub configured: bool,
     pub connection_status: String,
     pub control_url: String,
@@ -49,6 +70,9 @@ impl AgentUi {
             && matches!(provider, "openai" | "kimi" | "deepseek" | "pollinations")
         {
             self.provider = provider.into();
+            if provider == "pollinations" {
+                self.model = POLLINATIONS_DEFAULT_MODEL.into();
+            }
         }
         if let Some(model) = value.get("model").and_then(Json::as_str).filter(|model| valid_model(model)) {
             self.model = model.into();
@@ -124,11 +148,7 @@ impl SheetApp {
                         if self.agent.configured { "Ключ настроен." } else { "Введите API-ключ Pollinations." }.into();
                     self.agent.status = self.agent.connection_status.clone();
                 } else if let Some(models) = result.get("models").and_then(Json::as_array) {
-                    self.agent.models = models
-                        .iter()
-                        .filter_map(|model| model.get("name").and_then(Json::as_str).filter(|name| valid_model(name)).map(str::to_string))
-                        .take(1000)
-                        .collect();
+                    self.agent.models = models.iter().filter_map(AgentModel::from_catalog).take(1000).collect();
                     self.agent.status = "Список моделей обновлён.".into();
                 } else if result.get("connectionVerified") == Some(&Json::Bool(true)) {
                     self.agent.connection_status = if result.get("usingDraftKey") == Some(&Json::Bool(true)) {
@@ -301,7 +321,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
             app.agent.model = match app.agent.provider.as_str() {
                 "kimi" => "kimi-k3.1-pro".into(),
                 "deepseek" => "deepseek-v4-flash-0731:free".into(),
-                "pollinations" => "openai".into(),
+                "pollinations" => POLLINATIONS_DEFAULT_MODEL.into(),
                 _ => "gpt-6.1-sol".into(),
             };
         }
@@ -401,10 +421,16 @@ fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
         ui.small("Ключ сохраняется на стороне приложения или сервера. В браузере сохраняется только выбор модели.");
         if !app.agent.models.is_empty() {
             craft_ui::ComboBox::from_id_salt("pollinations-models").selected_text("Выбрать из каталога моделей").show_ui(ui, |ui| {
-                for name in &app.agent.models {
-                    ui.selectable_value(&mut app.agent.model, name.clone(), name);
+                for model in &app.agent.models {
+                    ui.selectable_value(&mut app.agent.model, model.name.clone(), &model.label);
                 }
             });
+        }
+        if app.agent.model == POLLINATIONS_DEFAULT_MODEL {
+            ui.small("Glyph Cluster · Free · экспериментальная · до 8 запросов/мин.");
+            ui.small("Pollinations может сохранять запросы и ответы этой модели и использовать их для обучения.");
+        } else if matches!(app.agent.model.as_str(), "qwen/qwen3guard-gen-8b" | "qwen3guard-gen-8b" | "qwen-safety") {
+            ui.small("Qwen3Guard · Free · модерация текста. Для задач с таблицей выберите Glyph Cluster.");
         }
         ui.horizontal_wrapped(|ui| {
             if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Сохранить настройки")).clicked() {
@@ -434,6 +460,21 @@ mod tests {
 
     use super::*;
     use crate::Services;
+
+    #[test]
+    fn pollinations_default_and_catalog_keep_paid_and_specialized_choices() {
+        let mut agent = AgentUi::new();
+        agent.restore_preferences(&json!({"provider":"pollinations"}));
+        assert_eq!(agent.model, POLLINATIONS_DEFAULT_MODEL);
+        agent.restore_preferences(&json!({"provider":"pollinations","model":"openai/gpt-5.4-nano"}));
+        assert_eq!(agent.model, "openai/gpt-5.4-nano");
+        for (cost, expected) in [("free", "Free"), ("paid", "Платная"), ("unknown", "Цена неизвестна")] {
+            let model = AgentModel::from_catalog(&json!({"name":"guard", "title":"Guard", "cost":cost, "specialized":true})).unwrap();
+            assert_eq!(model.name, "guard");
+            assert!(model.label.contains(expected));
+            assert!(model.label.contains("специализированная"));
+        }
+    }
 
     #[test]
     fn panel_controls_have_accessible_names() {

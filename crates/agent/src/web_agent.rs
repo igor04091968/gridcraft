@@ -323,7 +323,7 @@ mod tests {
         let pollinations = ProviderProfile::for_name("pollinations").unwrap();
         assert_eq!(pollinations.base_url, "https://gen.pollinations.ai/v1");
         assert_eq!(pollinations.api_key_env, "GRIDCRAFT_AGENT_POLLINATIONS_API_KEY");
-        assert_eq!(pollinations.default_model, "openai");
+        assert_eq!(pollinations.default_model, "stealth/glyph-cluster");
         assert!(ProviderProfile::for_name("https://attacker.example").is_err());
     }
 

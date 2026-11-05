@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-pub const DEFAULT_MODEL: &str = "openai";
+pub const DEFAULT_MODEL: &str = "stealth/glyph-cluster";
 const MAX_CONFIG: u64 = 16 * 1024;
 
 #[derive(Default)]
@@ -148,7 +148,7 @@ pub(super) fn handle(method: &str, params: &Value) -> Result<Value, String> {
 }
 
 fn model_list(value: &Value) -> Vec<Value> {
-    value
+    let mut models: Vec<Value> = value
         .as_array()
         .into_iter()
         .flatten()
@@ -159,9 +159,37 @@ fn model_list(value: &Value) -> Vec<Value> {
                 .get("supported_endpoints")
                 .and_then(Value::as_array)
                 .is_some_and(|endpoints| endpoints.iter().any(|endpoint| endpoint.as_str() == Some("/v1/chat/completions")));
-            compatible.then(|| json!({"name": name, "title": model.get("title").and_then(Value::as_str).unwrap_or(name)}))
+            compatible.then(|| {
+                json!({"name": name,
+                    "title": model.get("title").and_then(Value::as_str).unwrap_or(name).chars().take(160).collect::<String>(),
+                    "cost": model_cost(model),
+                    "specialized": model.get("is_specialized").and_then(Value::as_bool).unwrap_or(false)})
+            })
         })
-        .collect()
+        .collect();
+    // Free general-purpose models first; keep every compatible paid/specialized entry.
+    models.sort_by_key(|model| (model["cost"] != "free", model["specialized"] == true));
+    models
+}
+
+fn model_cost(model: &Value) -> &'static str {
+    let Some(pricing) = model.get("pricing").and_then(Value::as_object) else { return "unknown" };
+    if pricing.get("currency").and_then(Value::as_str) != Some("pollen") {
+        return "unknown";
+    }
+    // Pollinations Free entries have currency-only pricing. paid_only=false also
+    // occurs on metered Quest models and must never mean free by itself.
+    if pricing.len() == 1 && model.get("paid_only").and_then(Value::as_bool) == Some(false) {
+        return "free";
+    }
+    if pricing.iter().any(|(key, value)| {
+        key != "currency"
+            && value.as_f64().or_else(|| value.as_str().and_then(|v| v.parse::<f64>().ok())).is_some_and(|rate| rate.is_finite() && rate > 0.0)
+    }) {
+        "paid"
+    } else {
+        "unknown"
+    }
 }
 
 fn get_json(path: &str, key: Option<&str>) -> Result<Value, String> {
@@ -210,8 +238,44 @@ mod tests {
             {"name":"image", "supported_endpoints":["/image"]},
             {"name":"text", "title":"Text model", "supported_endpoints":["/v1/chat/completions"]}
         ]));
-        assert_eq!(list, vec![json!({"name":"text", "title":"Text model"})]);
+        assert_eq!(list, vec![json!({"name":"text", "title":"Text model", "cost":"unknown", "specialized":false})]);
         assert!(!http_error(ureq::Error::StatusCode(401)).contains("Bearer"));
+    }
+
+    #[test]
+    fn free_models_sort_first_without_mistaking_quest_models_for_free() {
+        let endpoint = json!(["/v1/chat/completions"]);
+        let models = model_list(&json!([
+            {"name":"quest", "supported_endpoints":endpoint, "paid_only":false, "pricing":{"currency":"pollen","promptTextTokens":"0.00000015"}},
+            {"name":"guard", "supported_endpoints":endpoint, "paid_only":false, "is_specialized":true, "pricing":{"currency":"pollen"}},
+            {"name":DEFAULT_MODEL, "supported_endpoints":endpoint, "paid_only":false, "pricing":{"currency":"pollen"}},
+            {"name":"missing-pricing", "supported_endpoints":endpoint, "paid_only":false},
+            {"name":"invalid-pricing", "supported_endpoints":endpoint, "pricing":{"currency":"pollen","promptTextTokens":"invalid"}},
+            {"name":"paid-only", "supported_endpoints":endpoint, "paid_only":true, "pricing":{"currency":"pollen"}}
+        ]));
+        assert_eq!(models.len(), 6);
+        assert_eq!(models[0]["name"], DEFAULT_MODEL);
+        assert_eq!(models[0]["cost"], "free");
+        assert_eq!(models[1]["name"], "guard");
+        assert_eq!(models[1]["specialized"], true);
+        assert_eq!(models[2]["cost"], "paid");
+        for model in &models[3..] {
+            assert_eq!(model["cost"], "unknown");
+        }
+    }
+
+    #[test]
+    fn fresh_settings_use_free_default_and_preserve_explicit_paid_selection() {
+        let dir = std::env::temp_dir().join(format!("gridcraft-agent-free-default-{}", std::process::id()));
+        let path = dir.join("agent.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        let fresh = Settings::read(&path).unwrap();
+        assert_eq!(fresh.model, DEFAULT_MODEL);
+        fresh.updated(&json!({"model":"openai/gpt-5.4-nano", "apiKey":"private-test-key"})).unwrap().write(&path).unwrap();
+        let reloaded = Settings::read(&path).unwrap().updated(&json!({"apiKey":""})).unwrap();
+        assert_eq!(reloaded.model, "openai/gpt-5.4-nano");
+        assert_eq!(reloaded.key, "private-test-key");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
