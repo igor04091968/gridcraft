@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-05 · **Change:** minor (built-in HTTPS/WSS hosting and browser reconnect; browser recent workbook reopen; Pollinations connection settings and shared native backend; AI proposals bound to workbook context; guarded agent Undo; pinned 78-file external XLSX corpus, metadata fixes: round-trip differing 26 → 0; AutoSum over a selected row puts its total to the right, and fills a selection's empty last row and column; earlier: macro engine and `macro.*` commands; macro interface on the Automate tab) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-11-05 · **Change:** minor (optional browser pairing persistence; built-in HTTPS/WSS hosting and browser reconnect; browser recent workbook reopen; Pollinations connection settings and shared native backend; AI proposals bound to workbook context; guarded agent Undo; pinned 78-file external XLSX corpus, metadata fixes: round-trip differing 26 → 0; AutoSum over a selected row puts its total to the right, and fills a selection's empty last row and column; earlier: macro engine and `macro.*` commands; macro interface on the Automate tab) · **Target:** Microsoft Excel (Microsoft 365)
 
 GridCraft aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -246,6 +246,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Optional browser pairing persistence and automatic connection after reload; explicit forgetting |
 | 2026-11-04 | minor | built-in HTTPS/WSS hosting and browser reconnect; see [WSS hosting](docs/wss-hosting.md) |
 | 2026-11-04 | minor | Browser recent workbook reopen: IndexedDB file copies, localStorage names, preserved after reload; synthetic workbook browser check passed |
 | 2026-11-04 | minor | Pollinations connection settings, model catalog, key removal and auth check in desktop/web panel; built-in native backend; no readiness score change |

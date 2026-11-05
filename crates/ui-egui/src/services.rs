@@ -42,7 +42,7 @@ pub struct Services {
     pub open_recent_async: Option<OpenRecent>,
     /// Send an agent request to the native backend or authenticated browser control channel.
     pub agent_send: Option<Box<dyn Fn(serde_json::Value)>>,
-    /// Browser: connect to a control server chosen in the panel; token is never persisted.
+    /// Browser: connect to a control server chosen in the panel; remembering is explicit opt-in.
     pub agent_connect: Option<AgentConnect>,
     /// Agent JSON-RPC responses delivered on the next UI frame.
     pub agent_inbox: Option<InboxJson>,

@@ -24,7 +24,8 @@ configured HTTPS origin, the agent at `/agent/ws`, and a minimal health response
    the page's own origin on HTTPS pages. Configure the Pollinations API key in its own panel.
 5. **Сменить токен и отключить клиентов** stops existing connections and replaces the
    token. Pair again using the new token. Tokens are generated from 256 random bits and
-   stored only in the private server configuration, not browser storage.
+   stored in the private server configuration. Browsers may remember their pairing token
+   only through the explicit **Запомнить на этом устройстве** option.
 
 `remote.json` lives next to the native agent settings: `$XDG_CONFIG_HOME/gridcraft` (or
 `~/.config/gridcraft`), `~/Library/Application Support/GridCraft`, or `%APPDATA%/GridCraft`.
@@ -63,10 +64,20 @@ reachability are deployment inputs. No ACME account or challenge mechanism is si
 configured, and self-signed test certificates are never used for public deployment.
 
 Browser reconnect uses 1–30 second backoff for transport failures, stops after authentication
-rejection, and retains the connection token only in tab memory. Explicit **Отключиться**
+rejection. By default the connection token stays in tab memory. Enable **Запомнить на этом
+устройстве** in the web connection panel to store the token and exact WSS endpoint in this
+browser's localStorage (`gridcraft.connection`) after successful authentication. Reopening or
+reloading the page then connects automatically. Credentials are separate from ordinary UI
+preferences; API keys are never included. An empty token field can reuse the remembered token
+only for that same endpoint. Unchecking the option or pressing **Забыть токен** deletes the
+stored pairing; an authentication rejection also deletes it and stops retries. Forgetting
+does not terminate the current connection. Browser storage failures are shown in the panel.
+Explicit **Отключиться**
 stops retries. In-flight requests and proposals are invalidated on disconnect; sent commands
 are never automatically retried, because Apply may already have changed the workbook.
-Inspect the workbook before submitting the task again. Reloading requires pairing again.
+Inspect the workbook before submitting the task again. Disconnect keeps explicitly remembered
+pairing for the next visit; use **Забыть токен** to prevent automatic connection on reload.
+Without remembered pairing, reloading requires entering the token again.
 
 ## Bounds and scope
 
@@ -136,9 +147,17 @@ The two shared-protocol authentication regression tests passed in native CI.
 The authenticated public socket also survived 65 seconds of idle time and accepted a further
 RPC, verifying protocol heartbeats. No provider generation or workbook writes were requested.
 
+The optional remembered pairing was verified in Chromium against the staged HTTPS/WSS build:
+no storage by default, explicit opt-in after authentication, automatic authentication after
+closing/reopening and reloading the page, reconnect with an empty token field at the remembered
+endpoint, disconnect without retries, explicit forgetting, rejected-token removal, malformed
+storage cleanup and a visible error when browser storage is blocked. The new storage tests
+cover endpoint binding, separation from provider preferences and oversized/corrupt inputs.
+
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-05 | minor | Optional browser pairing persistence, automatic connection after reload and explicit forgetting |
 | 2026-11-05 | minor | Verified notebook deployment, renewed certificate, automatic TLS synchronization and public trusted WSS |
 | 2026-11-04 | minor | Built-in single-origin HTTPS/WSS server, desktop settings, isolated browser channels, reconnect and operational bounds |

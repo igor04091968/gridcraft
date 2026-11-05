@@ -24,6 +24,8 @@ pub struct AgentUi {
     pub connection_status: String,
     pub control_url: String,
     pub control_token_input: String,
+    pub remember_control_token: bool,
+    pub forget_control_token: bool,
     remote: remote::RemoteUi,
     web_connected: bool,
     settings_requested: bool,
@@ -174,6 +176,13 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     let label = ui.label("Токен подключения");
                     ui.add(egui::TextEdit::singleline(&mut app.agent.control_token_input).password(true)).labelled_by(label.id);
                 });
+                ui.checkbox(&mut app.agent.remember_control_token, "Запомнить на этом устройстве")
+                    .on_hover_text("Сохранить токен в этом браузере и подключаться после открытия страницы. «Забыть токен» удаляет сохранение.");
+                if ui.button("Забыть токен").clicked() {
+                    app.agent.remember_control_token = false;
+                    app.agent.forget_control_token = true;
+                    app.agent.control_token_input.clear();
+                }
                 if ui.button("Подключиться").clicked() {
                     let token = std::mem::take(&mut app.agent.control_token_input);
                     if let Some(connect) = &app.services.agent_connect {

@@ -193,7 +193,7 @@ impl BrowserControl {
     }
 }
 
-/// Credentials live only in this tab's memory. Never replay an RPC after reconnecting.
+/// Reconnection state in tab memory. Never replay an RPC after reconnecting.
 pub struct ConnectionPlan {
     pub url: String,
     pub token: String,

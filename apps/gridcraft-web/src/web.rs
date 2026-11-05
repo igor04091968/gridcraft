@@ -109,15 +109,22 @@ pub fn start() {
                     if let Some(url) = crate::control_web::default_url() {
                         app.agent.control_url = url;
                     }
-                    let connection_plan = match (query_param("control"), query_param("controlToken")) {
+                    let saved_connection = stored(crate::connection_storage::KEY);
+                    let remembered = saved_connection.as_deref().and_then(crate::connection_storage::RememberedConnection::restore);
+                    let legacy = match (query_param("control"), query_param("controlToken")) {
                         (Some(url), Some(token)) => Some(crate::control_web::ConnectionPlan::new(url, token)),
                         _ => None,
                     };
+                    app.agent.remember_control_token = remembered.is_some() && legacy.is_none();
+                    let connection_plan = legacy.or_else(|| remembered.map(|saved| crate::control_web::ConnectionPlan::new(saved.url, saved.token)));
+                    if let Some(plan) = &connection_plan {
+                        app.agent.control_url = plan.url.clone();
+                    }
                     remove_legacy_token_from_url();
                     let control = connection_plan
                         .as_ref()
                         .and_then(|plan| crate::control_web::BrowserControl::connect(&plan.url, &plan.token, cc.egui_ctx.clone(), &mut app));
-                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, prefs, control, agent_connections, connection_plan }))
+                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, prefs, control, agent_connections, connection_plan, saved_connection }))
                 }),
             )
             .await;
@@ -168,6 +175,7 @@ struct WebShell {
     control: Option<crate::control_web::BrowserControl>,
     agent_connections: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
     connection_plan: Option<crate::control_web::ConnectionPlan>,
+    saved_connection: Option<String>,
 }
 
 fn local_storage() -> Option<web_sys::Storage> {
@@ -182,7 +190,14 @@ fn stored(key: &str) -> Option<String> {
 impl eframe::App for WebShell {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let connections = std::mem::take(&mut *self.agent_connections.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
-        for (url, token) in connections {
+        for (url, mut token) in connections {
+            if !url.is_empty()
+                && token.is_empty()
+                && let Some(saved) = self.saved_connection.as_deref().and_then(crate::connection_storage::RememberedConnection::restore)
+                && let Some(remembered) = saved.token_for(&url)
+            {
+                token = remembered.into();
+            }
             if let Some(control) = self.control.take() {
                 control.close();
             }
@@ -192,6 +207,7 @@ impl eframe::App for WebShell {
             if url.is_empty() && token.is_empty() {
                 self.connection_plan = None;
             } else {
+                self.store_connection(None);
                 self.control = crate::control_web::BrowserControl::connect(&url, &token, ctx.clone(), &mut self.app);
                 self.connection_plan = self.control.as_ref().map(|_| crate::control_web::ConnectionPlan::new(url, token));
             }
@@ -200,9 +216,27 @@ impl eframe::App for WebShell {
             && !plan.update(&mut self.control, &mut self.app, ctx)
         {
             self.connection_plan = None;
+            self.app.agent.remember_control_token = false;
             if let Some(control) = self.control.take() {
                 control.close();
             }
+        }
+        if std::mem::take(&mut self.app.agent.forget_control_token) {
+            if self.store_connection(None) {
+                self.app.agent.status = "Сохранённый токен удалён с этого устройства.".into();
+            }
+        }
+        if !self.app.agent.remember_control_token {
+            self.store_connection(None);
+        } else if self.control.as_ref().is_some_and(crate::control_web::BrowserControl::authenticated)
+            && let Some(plan) = &self.connection_plan
+        {
+            let saved = crate::connection_storage::RememberedConnection::encode(&plan.url, &plan.token);
+            if saved.is_none() {
+                self.app.agent.remember_control_token = false;
+                self.app.agent.status = "Токен слишком длинный для сохранения на устройстве.".into();
+            }
+            self.store_connection(saved);
         }
         let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
         for f in dropped {
@@ -253,6 +287,26 @@ impl eframe::App for WebShell {
         if let Some(bridge) = &self.bridge {
             bridge.sync(&mut self.app);
         }
+    }
+}
+
+impl WebShell {
+    fn store_connection(&mut self, value: Option<String>) -> bool {
+        if self.saved_connection == value {
+            return true;
+        }
+        let saved = local_storage().is_some_and(|store| match &value {
+            Some(value) => store.set_item(crate::connection_storage::KEY, value).is_ok(),
+            None => store.remove_item(crate::connection_storage::KEY).is_ok(),
+        });
+        if saved {
+            self.saved_connection = value;
+        } else {
+            self.saved_connection = None;
+            self.app.agent.remember_control_token = false;
+            self.app.agent.status = "Браузер не разрешил сохранить или удалить токен. Проверьте настройки хранения данных сайта.".into();
+        }
+        saved
     }
 }
 
