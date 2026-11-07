@@ -6,6 +6,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use tungstenite::{Message, WebSocket};
 
+mod mistral;
 mod pollinations;
 mod settings;
 
@@ -21,7 +22,10 @@ pub fn handle<S: Read + Write>(ws: &mut WebSocket<S>, request: &Value) -> Result
     let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
     let result = match method {
         "agent.run" => propose(ws, &params),
-        "agent.settings" | "agent.configure" | "agent.models" | "agent.test" => settings::handle(method, &params),
+        "agent.settings" | "agent.configure" | "agent.models" | "agent.test" => match params.get("provider").and_then(Value::as_str) {
+            Some("mistral") => mistral::handle(method, &params),
+            _ => settings::handle(method, &params),
+        },
         "agent.copyKey" => copy_provider_key(&params),
         "agent.apply" => apply(ws, params),
         "agent.undo" => call_browser(ws, 9003, "agent.undoReviewed", json!({})),
@@ -41,6 +45,8 @@ fn copy_provider_key(params: &Value) -> Result<Value, String> {
     let provider = params.get("provider").and_then(Value::as_str).ok_or("Provider is required.")?;
     let key = if provider == "pollinations" {
         settings::Settings::load()?.key()?
+    } else if provider == "mistral" {
+        mistral::Settings::load()?.key()?
     } else {
         let profile = ProviderProfile::for_name(provider)?;
         if !matches!(provider, "openai" | "kimi" | "deepseek") {
@@ -77,9 +83,12 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     let provider = params.get("provider").and_then(Value::as_str).unwrap_or("legacy");
     let profile = ProviderProfile::for_name(provider)?;
     let saved = if provider == "pollinations" { Some(settings::Settings::load()?) } else { None };
+    let saved_mistral = if provider == "mistral" { Some(mistral::Settings::load()?) } else { None };
     let requested_model = params.get("model").and_then(Value::as_str).filter(|m| !m.trim().is_empty() && *m != "default");
     let model = requested_model.map(str::to_string).unwrap_or_else(|| {
         if let Some(saved) = &saved {
+            saved.model.clone()
+        } else if let Some(saved) = &saved_mistral {
             saved.model.clone()
         } else if provider == "legacy" {
             std::env::var("GRIDCRAFT_AGENT_MODEL").ok().filter(|m| !m.trim().is_empty()).unwrap_or_else(|| profile.default_model.into())
@@ -90,9 +99,10 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     if !settings::valid_model(&model) {
         return Err("Invalid model name (maximum 128 characters).".into());
     }
-    let key = match &saved {
-        Some(saved) => saved.key()?,
-        None => env(profile.api_key_env)?,
+    let key = match (&saved, &saved_mistral) {
+        (Some(saved), _) => saved.key()?,
+        (_, Some(saved)) => saved.key()?,
+        _ => env(profile.api_key_env)?,
     };
     let steps = params.get("maxSteps").and_then(Value::as_u64).unwrap_or(4);
     if !(1..=20).contains(&steps) {
@@ -104,9 +114,9 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     }
     let snapshot = call_browser(ws, 9000, "agent.snapshot", read_params)?;
     let expected = snapshot.get("context").filter(|value| value.is_object()).ok_or("workbook snapshot has no context")?.clone();
-    let base = std::env::var(profile.base_url_env).unwrap_or_else(|_| profile.base_url.into());
+    let base = profile.base_url_env.and_then(|name| std::env::var(name).ok()).unwrap_or_else(|| profile.base_url.into());
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
-    let system = "You are GridCraft's spreadsheet agent. Return exactly one JSON object per turn: {\"summary\":string,\"inspect\":null|{\"range\":\"A1:B8\"},\"action\":null|{\"command\":string,\"params\":object},\"undo\":string}. Use inspect to request a bounded read of the ACTIVE sheet before deciding; the next turn will contain that range's values. You may inspect multiple ranges, one per turn, within the supplied step budget. Never inspect whole rows/columns or more than 5000 cells at once. When ready, set inspect:null and return either one action or action:null. Propose at most one safe engine command. Use cell.set for one cell or range.setValues for a rectangular 2-D array. To merge cells, use home.mergeCells with an A1 range; omit range only to use the current selection. To move whole columns, use sheet.moveColumns with cols as an A1 whole-column range and before as a zero-based boundary. Never send an empty range. Never propose file.save, file.open, app.quit, macros or external links. The user reviews every action before execution. Never claim an action was applied or verified; GridCraft will apply and verify it separately.";
+    let system = "You are GridCraft's spreadsheet agent. Reply in the same language as the user's task. Return exactly one JSON object per turn: {\"summary\":string,\"inspect\":null|{\"range\":\"A1:B8\"},\"action\":null|{\"command\":string,\"params\":object},\"undo\":string}. Keep summary under 400 characters. For a question, count, comparison, or analysis that depends on workbook data, inspect the smallest relevant bounded range(s) on the ACTIVE sheet before answering; the next turn will contain those values. If the task names a column, header, or range, inspect it first and include adjacent identifying columns only when needed. After inspecting, give a direct, concise, evidence-based answer in summary and set action:null for read-only questions. Do not ask a generic follow-up when the task is clear; if evidence is insufficient, say exactly what is missing and what range was checked. You may inspect multiple ranges, one per turn, within the supplied step budget. Never inspect whole rows/columns or more than 5000 cells at once. When ready, set inspect:null and return either one action or action:null. Propose at most one safe engine command. Use cell.set for one cell or range.setValues for a rectangular 2-D array. To merge cells, use home.mergeCells with an A1 range; omit range only to use the current selection. To move whole columns, use sheet.moveColumns with cols as an A1 whole-column range and before as a zero-based boundary. Never send an empty range. Never propose file.save, file.open, app.quit, macros or external links. The user reviews every action before execution. Never claim an action was applied or verified; GridCraft will apply and verify it separately.";
     let initial = serde_json::to_string(&json!({"task": task, "workbook": snapshot.get("workbook"), "range": snapshot.get("range")}))
         .map_err(|e| e.to_string())?;
     let initial: String = initial.chars().take(60_000).collect();
@@ -116,21 +126,46 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     let mut repair_used = false;
 
     for step in 0..steps {
-        let body = json!({"model":model,"max_completion_tokens":1800,"messages":messages.clone()});
+        let body = completion_body(provider, &model, &messages);
         let value = complete(provider, &url, &key, body)?;
         let content = message_content(&value);
         let content = content.as_deref().unwrap_or("");
+        if output_token_limit_reached(&value) {
+            if !repair_used && step + 1 < steps {
+                repair_used = true;
+                messages.push(json!({"role":"assistant","content":content}));
+                messages.push(json!({"role":"user","content":"Your previous response was cut off at the output token limit. Return a shorter, complete JSON object. If the requested changes cannot fit in one action, set action:null and explain briefly in summary that the task needs a smaller range; do not silently omit requested rows."}));
+                continue;
+            }
+            return Err("Ответ модели обрезан лимитом токенов. Уменьшите диапазон или разделите задачу на несколько запросов.".into());
+        }
         let mut proposal = match parse_proposal(content) {
             Ok(proposal) => proposal,
             Err(error) if !repair_used && step + 1 < steps => {
                 repair_used = true;
                 messages.push(json!({"role":"assistant","content":content}));
-                messages.push(json!({"role":"user","content":format!("Your previous response was unusable ({error}). Return a complete, non-empty JSON object matching the required schema. Do not use tools or markdown fences.")}));
+                messages.push(json!({"role":"user","content":format!("Your previous response was unusable ({error}). Return a shorter, complete JSON object matching the required schema, without markdown. If the requested changes cannot fit in one action, set action:null and explain briefly in summary that the task needs a smaller range; do not silently omit requested rows.")}));
                 continue;
             }
             Err(_) => return Err("Модель не вернула корректный ответ после повторного запроса. Книга не изменена; отправьте задачу ещё раз или выберите другую модель.".into()),
         };
         validate_proposal(&proposal)?;
+
+        if proposal.get("action").is_none_or(Value::is_null)
+            && proposal.get("inspect").is_none_or(Value::is_null)
+            && inspections.is_empty()
+            && proposal.get("summary").and_then(Value::as_str).is_some_and(is_generic_clarification)
+        {
+            if !repair_used && step + 1 < steps {
+                repair_used = true;
+                messages.push(json!({"role":"assistant","content":content}));
+                messages.push(json!({"role":"user","content":"Your generic follow-up does not answer the user's specific task. Reply in the same language as the task. If it asks for a count or fact from the workbook, inspect the smallest relevant bounded range first, then provide the direct evidence-based answer in summary with action:null. Do not ask what the user wants. If the workbook does not contain enough evidence, state exactly what is missing."}));
+                continue;
+            }
+            return Err(
+                "Модель не ответила на задачу по книге. Укажите столбец или диапазон с нужными данными и повторите запрос. Книга не изменена.".into(),
+            );
+        }
 
         if let Some(inspect) = proposal.get("inspect").filter(|value| !value.is_null()) {
             if step + 1 >= steps {
@@ -192,6 +227,24 @@ fn complete(provider: &str, url: &str, key: &str, body: Value) -> Result<Value, 
     response.body_mut().with_config().limit(1024 * 1024).read_json().map_err(|e| format!("invalid agent response: {e}"))
 }
 
+fn completion_body(provider: &str, model: &str, messages: &[Value]) -> Value {
+    let max_completion_tokens = if provider == "pollinations" { 4096 } else { 1800 };
+    let mut body = if provider == "mistral" {
+        json!({"model":model,"max_tokens":max_completion_tokens,"messages":messages})
+    } else {
+        json!({"model":model,"max_completion_tokens":max_completion_tokens,"messages":messages})
+    };
+    if provider == "pollinations" {
+        body["reasoning_effort"] = json!("low");
+        body["response_format"] = json!({"type":"json_object"});
+    }
+    body
+}
+
+fn output_token_limit_reached(response: &Value) -> bool {
+    matches!(response.pointer("/choices/0/finish_reason").and_then(Value::as_str), Some("length" | "max_tokens"))
+}
+
 fn message_content(response: &Value) -> Option<String> {
     let content = response.pointer("/choices/0/message/content")?;
     match content {
@@ -202,6 +255,23 @@ fn message_content(response: &Value) -> Option<String> {
         }
         _ => None,
     }
+}
+
+fn is_generic_clarification(summary: &str) -> bool {
+    let summary = summary.to_lowercase();
+    [
+        "what would you like me to do",
+        "what would you like me to help",
+        "what should i do",
+        "how can i help",
+        "what can i help",
+        "чем могу помочь",
+        "чем я могу помочь",
+        "что вы хотите, чтобы я сделал",
+        "что вы хотите, чтобы я сделал с",
+    ]
+    .iter()
+    .any(|phrase| summary.contains(phrase))
 }
 
 fn validate_proposal(proposal: &Value) -> Result<(), String> {
@@ -228,7 +298,7 @@ fn inspection_range(inspect: &Value) -> Result<&str, String> {
 
 struct ProviderProfile {
     base_url: &'static str,
-    base_url_env: &'static str,
+    base_url_env: Option<&'static str>,
     api_key_env: &'static str,
     default_model: &'static str,
 }
@@ -238,31 +308,37 @@ impl ProviderProfile {
         match provider {
             "openai" => Ok(Self {
                 base_url: "https://api.openai.com/v1",
-                base_url_env: "GRIDCRAFT_AGENT_OPENAI_BASE_URL",
+                base_url_env: Some("GRIDCRAFT_AGENT_OPENAI_BASE_URL"),
                 api_key_env: "GRIDCRAFT_AGENT_OPENAI_API_KEY",
                 default_model: "gpt-6.1-sol",
             }),
             "kimi" => Ok(Self {
                 base_url: "https://api.moonshot.ai/v1",
-                base_url_env: "GRIDCRAFT_AGENT_KIMI_BASE_URL",
+                base_url_env: Some("GRIDCRAFT_AGENT_KIMI_BASE_URL"),
                 api_key_env: "GRIDCRAFT_AGENT_KIMI_API_KEY",
                 default_model: "kimi-k3.1-pro",
             }),
+            "mistral" => Ok(Self {
+                base_url: "https://api.mistral.ai/v1",
+                base_url_env: None,
+                api_key_env: "GRIDCRAFT_AGENT_MISTRAL_API_KEY",
+                default_model: mistral::DEFAULT_MODEL,
+            }),
             "deepseek" => Ok(Self {
                 base_url: "https://plusvibeapi.ru/v1",
-                base_url_env: "GRIDCRAFT_AGENT_PLUSVIBE_BASE_URL",
+                base_url_env: Some("GRIDCRAFT_AGENT_PLUSVIBE_BASE_URL"),
                 api_key_env: "GRIDCRAFT_AGENT_PLUSVIBE_API_KEY",
                 default_model: "deepseek-v4-flash-0731:free",
             }),
             "pollinations" => Ok(Self {
                 base_url: "https://gen.pollinations.ai/v1",
-                base_url_env: "GRIDCRAFT_AGENT_POLLINATIONS_BASE_URL",
+                base_url_env: Some("GRIDCRAFT_AGENT_POLLINATIONS_BASE_URL"),
                 api_key_env: "GRIDCRAFT_AGENT_POLLINATIONS_API_KEY",
                 default_model: settings::DEFAULT_MODEL,
             }),
             "legacy" => Ok(Self {
                 base_url: "http://127.0.0.1:11434/v1",
-                base_url_env: "GRIDCRAFT_AGENT_BASE_URL",
+                base_url_env: Some("GRIDCRAFT_AGENT_BASE_URL"),
                 api_key_env: "GRIDCRAFT_AGENT_API_KEY",
                 default_model: "default",
             }),
@@ -433,8 +509,33 @@ mod tests {
         let pollinations = ProviderProfile::for_name("pollinations").unwrap();
         assert_eq!(pollinations.base_url, "https://gen.pollinations.ai/v1");
         assert_eq!(pollinations.api_key_env, "GRIDCRAFT_AGENT_POLLINATIONS_API_KEY");
-        assert_eq!(pollinations.default_model, "stealth/glyph-cluster");
+        assert_eq!(pollinations.default_model, "openai/gpt-6-luna");
         assert!(ProviderProfile::for_name("https://attacker.example").is_err());
+    }
+
+    #[test]
+    fn pollinations_requests_json_with_low_reasoning_and_larger_completion_budget() {
+        let messages = vec![json!({"role":"user","content":"synthetic"})];
+        let body = completion_body("pollinations", "openai/gpt-6-luna", &messages);
+        assert_eq!(body["model"], "openai/gpt-6-luna");
+        assert_eq!(body["max_completion_tokens"], 4096);
+        assert_eq!(body["reasoning_effort"], "low");
+        assert_eq!(body["response_format"], json!({"type":"json_object"}));
+    }
+
+    #[test]
+    fn output_token_limit_reasons_are_detected_without_flagging_complete_answers() {
+        assert!(output_token_limit_reached(&json!({"choices":[{"finish_reason":"length"}]})));
+        assert!(output_token_limit_reached(&json!({"choices":[{"finish_reason":"max_tokens"}]})));
+        assert!(!output_token_limit_reached(&json!({"choices":[{"finish_reason":"stop"}]})));
+        assert!(!output_token_limit_reached(&json!({"choices":[]})));
+    }
+
+    #[test]
+    fn generic_clarification_is_detected_in_english_and_russian() {
+        assert!(is_generic_clarification("What would you like me to do with this server inventory?"));
+        assert!(is_generic_clarification("Чем могу помочь с этой таблицей?"));
+        assert!(!is_generic_clarification("В столбце K нашёл 15 строк с незавершённым обновлением."));
     }
 
     #[test]

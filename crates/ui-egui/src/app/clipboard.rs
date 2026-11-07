@@ -59,7 +59,7 @@ impl SheetApp {
 
     /// The system clipboard's plain text, with the line endings of egui's `Event::Paste` text.
     /// `None` when it holds no text or the host can't read it.
-    pub(super) fn system_clipboard_text(&mut self) -> Option<String> {
+    pub(crate) fn system_clipboard_text(&mut self) -> Option<String> {
         self.services.paste_text.as_mut().and_then(|read| read()).filter(|t| !t.is_empty()).map(|t| t.replace("\r\n", "\n"))
     }
 

@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-pub const DEFAULT_MODEL: &str = "stealth/glyph-cluster";
+pub const DEFAULT_MODEL: &str = "openai/gpt-6-luna";
+const LEGACY_DEFAULT_MODEL: &str = "stealth/glyph-cluster";
 const MAX_CONFIG: u64 = 16 * 1024;
 
 #[derive(Default)]
@@ -18,7 +19,7 @@ pub fn valid_model(model: &str) -> bool {
     !model.trim().is_empty() && model.len() <= 128 && !model.chars().any(char::is_control)
 }
 
-fn config_path() -> Result<PathBuf, String> {
+pub(super) fn config_path() -> Result<PathBuf, String> {
     if let Some(path) = std::env::var_os("GRIDCRAFT_AGENT_CONFIG_PATH") {
         return Ok(PathBuf::from(path));
     }
@@ -41,29 +42,9 @@ impl Settings {
     }
 
     fn read(path: &Path) -> Result<Self, String> {
-        let metadata = match std::fs::symlink_metadata(path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Self { model: DEFAULT_MODEL.into(), ..Self::default() }),
-            Err(_) => return Err("Cannot read agent settings.".into()),
-        };
-        if !metadata.is_file() || metadata.len() > MAX_CONFIG {
-            return Err("Agent settings must be a regular file smaller than 16 KiB.".into());
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if metadata.permissions().mode() & 0o077 != 0 {
-                return Err("Agent settings must be private (mode 0600).".into());
-            }
-        }
-        let file = std::fs::File::open(path).map_err(|_| "Cannot read agent settings.")?;
-        let mut bytes = Vec::new();
-        std::io::Read::read_to_end(&mut std::io::Read::take(file, MAX_CONFIG + 1), &mut bytes).map_err(|_| "Cannot read agent settings.")?;
-        if bytes.len() as u64 > MAX_CONFIG {
-            return Err("Agent settings are too large.".into());
-        }
-        let value: Value = serde_json::from_slice(&bytes).map_err(|_| "Invalid agent settings file.")?;
+        let value = read_config(path)?;
         let model = value.pointer("/pollinations/model").and_then(Value::as_str).unwrap_or(DEFAULT_MODEL);
+        let model = if model == LEGACY_DEFAULT_MODEL { DEFAULT_MODEL } else { model };
         let key = value.pointer("/pollinations/apiKey").and_then(Value::as_str).unwrap_or("");
         if !valid_model(model) || !valid_key(key) {
             return Err("Invalid Pollinations settings.".into());
@@ -102,17 +83,55 @@ impl Settings {
     }
 
     fn write(&self, path: &Path) -> Result<(), String> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|_| "Cannot create agent settings directory.")?;
-        }
-        let bytes = serde_json::to_vec_pretty(&json!({"version": 1, "pollinations": {"apiKey": self.key, "model": self.model}}))
-            .map_err(|_| "Cannot serialize agent settings.")?;
-        let path = path.to_str().ok_or("Agent settings path is not valid UTF-8.")?;
-        gridcraft_engine::io::write_file(path, &bytes).map_err(|_| "Cannot save private agent settings.".into())
+        let mut value = read_config(path)?;
+        value["version"] = json!(1);
+        value["pollinations"] = json!({"apiKey": self.key, "model": self.model});
+        write_config(path, &value)
     }
 }
 
-fn valid_key(key: &str) -> bool {
+pub(super) fn read_config(path: &Path) -> Result<Value, String> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(json!({"version": 1})),
+        Err(_) => return Err("Cannot read agent settings.".into()),
+    };
+    if !metadata.is_file() || metadata.len() > MAX_CONFIG {
+        return Err("Agent settings must be a regular file smaller than 16 KiB.".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err("Agent settings must be private (mode 0600).".into());
+        }
+    }
+    let file = std::fs::File::open(path).map_err(|_| "Cannot read agent settings.")?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut std::io::Read::take(file, MAX_CONFIG + 1), &mut bytes).map_err(|_| "Cannot read agent settings.")?;
+    if bytes.len() as u64 > MAX_CONFIG {
+        return Err("Agent settings are too large.".into());
+    }
+    let value: Value = serde_json::from_slice(&bytes).map_err(|_| "Invalid agent settings file.")?;
+    if !value.is_object() {
+        return Err("Invalid agent settings file.".into());
+    }
+    Ok(value)
+}
+
+pub(super) fn write_config(path: &Path, value: &Value) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|_| "Cannot create agent settings directory.")?;
+    }
+    let bytes = serde_json::to_vec_pretty(value).map_err(|_| "Cannot serialize agent settings.")?;
+    if bytes.len() as u64 > MAX_CONFIG {
+        return Err("Agent settings are too large.".into());
+    }
+    let path = path.to_str().ok_or("Agent settings path is not valid UTF-8.")?;
+    gridcraft_engine::io::write_file(path, &bytes).map_err(|_| "Cannot save private agent settings.".into())
+}
+
+pub(super) fn valid_key(key: &str) -> bool {
     key.len() <= 4096 && !key.chars().any(char::is_whitespace) && !key.chars().any(char::is_control)
 }
 
@@ -265,8 +284,8 @@ mod tests {
     }
 
     #[test]
-    fn fresh_settings_use_free_default_and_preserve_explicit_paid_selection() {
-        let dir = std::env::temp_dir().join(format!("gridcraft-agent-free-default-{}", std::process::id()));
+    fn fresh_settings_use_luna_default_and_preserve_explicit_paid_selection() {
+        let dir = std::env::temp_dir().join(format!("gridcraft-agent-luna-default-{}", std::process::id()));
         let path = dir.join("agent.json");
         let _ = std::fs::remove_dir_all(&dir);
         let fresh = Settings::read(&path).unwrap();

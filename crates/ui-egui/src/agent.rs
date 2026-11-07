@@ -9,7 +9,8 @@ mod feedback_tests;
 mod remote;
 mod review;
 
-const POLLINATIONS_DEFAULT_MODEL: &str = "stealth/glyph-cluster";
+const POLLINATIONS_DEFAULT_MODEL: &str = "openai/gpt-6-luna";
+const POLLINATIONS_LEGACY_DEFAULT_MODEL: &str = "stealth/glyph-cluster";
 
 pub struct AgentModel {
     name: String,
@@ -71,7 +72,7 @@ impl AgentUi {
 
     pub fn restore_preferences(&mut self, value: &Json) {
         if let Some(provider) = value.get("provider").and_then(Json::as_str)
-            && matches!(provider, "openai" | "kimi" | "deepseek" | "pollinations")
+            && matches!(provider, "openai" | "kimi" | "deepseek" | "mistral" | "pollinations")
         {
             self.provider = provider.into();
             if provider == "pollinations" {
@@ -79,7 +80,11 @@ impl AgentUi {
             }
         }
         if let Some(model) = value.get("model").and_then(Json::as_str).filter(|model| valid_model(model)) {
-            self.model = model.into();
+            self.model = if self.provider == "pollinations" && model == POLLINATIONS_LEGACY_DEFAULT_MODEL {
+                POLLINATIONS_DEFAULT_MODEL.into()
+            } else {
+                model.into()
+            };
         }
     }
 
@@ -148,27 +153,35 @@ impl SheetApp {
                     self.agent.reset_connection();
                     self.agent.status =
                         "Соединение прервано. Отправленные команды не повторяются; подключение восстанавливается автоматически.".into();
-                } else if result.get("provider").and_then(Json::as_str) == Some("pollinations")
+                } else if matches!(result.get("provider").and_then(Json::as_str), Some("pollinations" | "mistral"))
                     && result.get("configured").and_then(Json::as_bool).is_some()
-                    && self.agent.provider == "pollinations"
+                    && result.get("provider").and_then(Json::as_str) == Some(self.agent.provider.as_str())
                 {
                     self.agent.configured = result.get("configured").and_then(Json::as_bool).unwrap_or(false);
                     if let Some(model) = result.get("model").and_then(Json::as_str).filter(|model| valid_model(model)) {
                         self.agent.model = model.into();
                     }
-                    self.agent.connection_status =
-                        if self.agent.configured { "Ключ настроен." } else { "Введите API-ключ Pollinations." }.into();
+                    self.agent.connection_status = if self.agent.configured {
+                        "Ключ настроен."
+                    } else if self.agent.provider == "mistral" {
+                        "Введите API-ключ Mistral."
+                    } else {
+                        "Введите API-ключ Pollinations."
+                    }
+                    .into();
                     self.agent.status = self.agent.connection_status.clone();
                 } else if let Some(models) = result.get("models").and_then(Json::as_array) {
                     self.agent.models = models.iter().filter_map(AgentModel::from_catalog).take(1000).collect();
                     self.agent.status = "Список моделей обновлён.".into();
                 } else if result.get("connectionVerified") == Some(&Json::Bool(true)) {
+                    let provider = result.get("provider").and_then(Json::as_str).unwrap_or(&self.agent.provider);
                     self.agent.connection_status = if result.get("usingDraftKey") == Some(&Json::Bool(true)) {
-                        "Ключ проверен. Сохраните настройки, чтобы использовать его."
+                        "Ключ проверен. Сохраните настройки, чтобы использовать его.".into()
+                    } else if provider == "mistral" {
+                        "Подключение к Mistral проверено.".into()
                     } else {
-                        "Подключение к Pollinations проверено."
-                    }
-                    .into();
+                        "Подключение к Pollinations проверено.".into()
+                    };
                     self.agent.status = self.agent.connection_status.clone();
                 } else if let Some(proposal) = result.get("proposal") {
                     self.agent.proposal = Some(proposal.clone());
@@ -229,7 +242,7 @@ impl SheetApp {
         if let Some(send) = &self.services.agent_send {
             self.agent.pending.insert(id);
             send(request);
-            self.agent.status = "Working…".into();
+            self.agent.status = "Агент анализирует книгу…".into();
         } else {
             self.agent.status = "Подключение агента недоступно. Проверьте запуск локальной службы или подключение веб-интерфейса.".into();
         }
@@ -266,6 +279,7 @@ impl SheetApp {
             return;
         }
         let task = self.agent.task.clone();
+        self.agent.proposal = None;
         self.agent.inspections.clear();
         self.agent.log.push(format!("Задача: {task}"));
         self.agent_send(
@@ -310,6 +324,14 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         app.agent.settings_requested = true;
         app.agent_send("agent.settings", json!({"provider":"pollinations"}));
         app.agent_send("agent.models", json!({"provider":"pollinations"}));
+    }
+    if app.agent.provider == "mistral"
+        && !app.agent.settings_requested
+        && app.services.agent_send.is_some()
+        && (app.services.agent_connect.is_none() || app.agent.web_connected)
+    {
+        app.agent.settings_requested = true;
+        app.agent_send("agent.settings", json!({"provider":"mistral"}));
     }
     let mut open = app.agent.open;
     let mut close_after_change = false;
@@ -368,6 +390,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 .selected_text(match app.agent.provider.as_str() {
                     "kimi" => "Kimi",
                     "deepseek" => "DeepSeek (PlusVibe)",
+                    "mistral" => "Mistral API",
                     "pollinations" => "Pollinations",
                     _ => "Codex (OpenAI API)",
                 })
@@ -375,6 +398,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     provider_changed |= ui.selectable_value(&mut app.agent.provider, "openai".into(), "Codex (OpenAI API)").changed();
                     provider_changed |= ui.selectable_value(&mut app.agent.provider, "kimi".into(), "Kimi").changed();
                     provider_changed |= ui.selectable_value(&mut app.agent.provider, "deepseek".into(), "DeepSeek (PlusVibe)").changed();
+                    provider_changed |= ui.selectable_value(&mut app.agent.provider, "mistral".into(), "Mistral API").changed();
                     provider_changed |= ui.selectable_value(&mut app.agent.provider, "pollinations".into(), "Pollinations").changed();
                 })
                 .response
@@ -392,6 +416,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
             app.agent.model = match app.agent.provider.as_str() {
                 "kimi" => "kimi-k3.1-pro".into(),
                 "deepseek" => "deepseek-v4-flash-0731:free".into(),
+                "mistral" => "mistral-small-latest".into(),
                 "pollinations" => POLLINATIONS_DEFAULT_MODEL.into(),
                 _ => "gpt-6.1-sol".into(),
             };
@@ -403,6 +428,8 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         });
         if app.agent.provider == "pollinations" {
             show_pollinations_settings(app, ui);
+        } else if app.agent.provider == "mistral" {
+            show_mistral_settings(app, ui);
         } else {
             let key_label = match app.agent.provider.as_str() {
                 "kimi" => "Ключ на сервере: GRIDCRAFT_AGENT_KIMI_API_KEY",
@@ -437,8 +464,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 app.agent.status = "Ввод ячейки отменён. Текст задачи сохранён.".into();
             }
         }
-        let run_label =
-            if app.editor.is_some() { "Сохранить ввод и предложить" } else { "Выполнить / предложить" };
+        let run_label = if app.editor.is_some() { "Сохранить ввод и предложить" } else { "Предложить" };
         if ui.add_enabled(app.agent.pending.is_empty() && !operation_pending, egui::Button::new(run_label)).clicked() {
             app.start_agent_task();
         }
@@ -457,7 +483,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 );
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(app.agent.pending.is_empty() && app.editor.is_none() && !operation_pending, egui::Button::new("Применить"))
+                        .add_enabled(app.agent.pending.is_empty() && app.editor.is_none() && !operation_pending, egui::Button::new("Выполнить"))
                         .clicked()
                     {
                         app.apply_agent_proposal(action.clone());
@@ -510,7 +536,7 @@ fn valid_model(model: &str) -> bool {
 
 fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
     egui::CollapsingHeader::new("Настройка Pollinations").default_open(true).show(ui, |ui| {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let label = ui.label("API-ключ");
             ui.add(egui::TextEdit::singleline(&mut app.agent.api_key_input).password(true).hint_text(if app.agent.configured {
                 "Ключ сохранён · оставьте пустым, чтобы сохранить его"
@@ -521,6 +547,13 @@ fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
             if ui.add_enabled(!app.agent.api_key_input.is_empty(), egui::Button::new("Копировать введённый ключ")).clicked() {
                 ui.ctx().copy_text(app.agent.api_key_input.clone());
                 app.agent.status = "Введённый ключ скопирован.".into();
+            }
+            if ui
+                .add_enabled(app.services.paste_text.is_some(), egui::Button::new("Вставить"))
+                .on_hover_text("Вставить API-ключ из системного буфера обмена")
+                .clicked()
+            {
+                paste_api_key_from_clipboard(app, "Pollinations");
             }
         });
         ui.horizontal_wrapped(|ui| {
@@ -543,10 +576,9 @@ fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
             });
         }
         if app.agent.model == POLLINATIONS_DEFAULT_MODEL {
-            ui.small("Glyph Cluster · Free · экспериментальная · до 8 запросов/мин.");
-            ui.small("Pollinations может сохранять запросы и ответы этой модели и использовать их для обучения.");
+            ui.small("GPT-6 Luna · reasoning для задач общего назначения.");
         } else if matches!(app.agent.model.as_str(), "qwen/qwen3guard-gen-8b" | "qwen3guard-gen-8b" | "qwen-safety") {
-            ui.small("Qwen3Guard · Free · модерация текста. Для задач с таблицей выберите Glyph Cluster.");
+            ui.small("Qwen3Guard · Free · модерация текста. Для работы с таблицей выберите модель общего назначения.");
         }
         ui.horizontal_wrapped(|ui| {
             if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Сохранить настройки")).clicked() {
@@ -566,6 +598,83 @@ fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
         });
         ui.label(&app.agent.connection_status);
     });
+}
+
+fn show_mistral_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Настройка Mistral API").default_open(true).show(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            let label = ui.label("API-ключ");
+            ui.add(egui::TextEdit::singleline(&mut app.agent.api_key_input).password(true).hint_text(if app.agent.configured {
+                "Ключ сохранён · оставьте пустым, чтобы сохранить его"
+            } else {
+                "Введите API-ключ Mistral"
+            }))
+            .labelled_by(label.id);
+            if ui.add_enabled(!app.agent.api_key_input.is_empty(), egui::Button::new("Копировать введённый ключ")).clicked() {
+                ui.ctx().copy_text(app.agent.api_key_input.clone());
+                app.agent.status = "Введённый ключ скопирован.".into();
+            }
+            if ui
+                .add_enabled(app.services.paste_text.is_some(), egui::Button::new("Вставить"))
+                .on_hover_text("Вставить API-ключ из системного буфера обмена")
+                .clicked()
+            {
+                paste_api_key_from_clipboard(app, "Mistral");
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            if app.agent.configured && ui.button("Показать сохранённый ключ").clicked() {
+                app.agent_send("agent.copyKey", json!({"provider":"mistral"}));
+            }
+            if ui.button("Копировать сведения").clicked() {
+                ui.ctx().copy_text(format!("Провайдер: Mistral API; модель: {}; API: https://api.mistral.ai/v1", app.agent.model));
+                app.agent.status = "Сведения скопированы.".into();
+            }
+        });
+        show_revealed_key(app, ui, "mistral");
+        ui.hyperlink_to("Панель Mistral API", "https://admin.mistral.ai/");
+        ui.small("Ключ хранится в приватном файле настроек GridCraft. Проверка запрашивает список моделей без генерации текста.");
+        if !app.agent.models.is_empty() {
+            craft_ui::ComboBox::from_id_salt("mistral-models").selected_text("Выбрать доступную модель").show_ui(ui, |ui| {
+                for model in &app.agent.models {
+                    ui.selectable_value(&mut app.agent.model, model.name.clone(), &model.label);
+                }
+            });
+        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Сохранить настройки")).clicked() {
+                let key = std::mem::take(&mut app.agent.api_key_input);
+                app.agent_send("agent.configure", json!({"provider":"mistral", "model":app.agent.model, "apiKey":key}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Проверить подключение")).clicked() {
+                app.agent_send("agent.test", json!({"provider":"mistral", "apiKey":app.agent.api_key_input}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Обновить модели")).clicked() {
+                app.agent_send("agent.models", json!({"provider":"mistral"}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Удалить сохранённый ключ")).clicked() {
+                app.agent.api_key_input.clear();
+                app.agent_send("agent.configure", json!({"provider":"mistral", "clearKey":true}));
+            }
+        });
+        ui.label(&app.agent.connection_status);
+    });
+}
+
+fn paste_api_key_from_clipboard(app: &mut SheetApp, provider: &str) {
+    let Some(text) = app.system_clipboard_text() else {
+        app.agent.status = "В буфере обмена нет текста.".into();
+        return;
+    };
+    let key = text.trim();
+    if key.is_empty() {
+        app.agent.status = "В буфере обмена нет текста.".into();
+    } else if key.len() > 4096 || key.chars().any(char::is_whitespace) || key.chars().any(char::is_control) {
+        app.agent.status = format!("Текст в буфере не подходит как API-ключ {provider}.");
+    } else {
+        app.agent.api_key_input = key.to_string();
+        app.agent.status = format!("API-ключ {provider} вставлен в скрытое поле.");
+    }
 }
 
 fn show_revealed_key(app: &mut SheetApp, ui: &mut egui::Ui, provider: &str) {

@@ -32,7 +32,7 @@ fn response_error(status: u16, error: &Value) -> String {
         .iter()
         .any(|reason| details.contains(reason))
     {
-        "Pollinations не распознал выбранную модель (HTTP 400). Обновите список моделей и выберите модель из каталога; бесплатная модель по умолчанию — stealth/glyph-cluster.".into()
+        "Pollinations не распознал выбранную модель (HTTP 400). Обновите список моделей и выберите модель из каталога; модель по умолчанию — openai/gpt-6-luna.".into()
     } else if ["context_length_exceeded", "maximum context length", "context window", "too many tokens", "input is too long", "prompt is too long"]
         .iter()
         .any(|reason| details.contains(reason))

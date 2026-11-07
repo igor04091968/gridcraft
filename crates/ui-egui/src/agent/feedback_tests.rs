@@ -73,7 +73,7 @@ fn cancel_cell_draft_keeps_task_and_does_not_send_or_write() {
     assert!(Arc::ptr_eq(&before, &app.session.doc().unwrap().wb));
     assert!(sent.lock().unwrap().is_empty());
     assert!(app.agent_snapshot(&json!({})).is_ok());
-    harness.get_by_label("Выполнить / предложить");
+    harness.get_by_label("Предложить");
 }
 
 #[test]
@@ -88,6 +88,21 @@ fn rejected_manual_input_keeps_draft_and_task_without_contacting_ai() {
     assert_eq!(app.agent.task, "Запиши 42 в B1");
     assert!(Arc::ptr_eq(&before, &app.session.doc().unwrap().wb));
     assert!(app.agent.status.contains("Задача агенту не отправлена"));
+}
+
+#[test]
+fn starting_new_task_hides_the_previous_proposal_while_waiting_for_a_reply() {
+    use egui_kittest::kittest::Queryable as _;
+    let (mut app, sent) = draft_app();
+    app.agent.proposal = Some(json!({"summary":"старый ответ"}));
+    let mut harness =
+        egui_kittest::Harness::builder().with_size(egui::vec2(1000.0, 900.0)).build_ui_state(|ui, app| show(app, &ui.ctx().clone()), app);
+    harness.run_steps(3);
+    harness.get_by_label("Предложить").click();
+    harness.run_steps(3);
+    assert!(harness.state().agent.proposal.is_none());
+    assert_eq!(harness.state().agent.status, "Агент анализирует книгу…");
+    assert_eq!(sent.lock().unwrap()[0]["method"], "agent.run");
 }
 
 #[test]
