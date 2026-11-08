@@ -6,6 +6,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use tungstenite::{Message, WebSocket};
 
+mod cohere;
 mod mistral;
 mod pollinations;
 mod settings;
@@ -24,6 +25,7 @@ pub fn handle<S: Read + Write>(ws: &mut WebSocket<S>, request: &Value) -> Result
         "agent.run" => propose(ws, &params),
         "agent.settings" | "agent.configure" | "agent.models" | "agent.test" => match params.get("provider").and_then(Value::as_str) {
             Some("mistral") => mistral::handle(method, &params),
+            Some("cohere") => cohere::handle(method, &params),
             _ => settings::handle(method, &params),
         },
         "agent.copyKey" => copy_provider_key(&params),
@@ -45,8 +47,10 @@ fn copy_provider_key(params: &Value) -> Result<Value, String> {
     let provider = params.get("provider").and_then(Value::as_str).ok_or("Provider is required.")?;
     let key = if provider == "pollinations" {
         settings::Settings::load()?.key()?
-    } else if provider == "mistral" {
+    } else if provider == "mistral" || provider == "cohere" {
         mistral::Settings::load()?.key()?
+    } else if provider == "cohere" {
+        cohere::Settings::load()?.key()?
     } else {
         let profile = ProviderProfile::for_name(provider)?;
         if !matches!(provider, "openai" | "kimi" | "deepseek") {
@@ -83,12 +87,15 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     let provider = params.get("provider").and_then(Value::as_str).unwrap_or("legacy");
     let profile = ProviderProfile::for_name(provider)?;
     let saved = if provider == "pollinations" { Some(settings::Settings::load()?) } else { None };
-    let saved_mistral = if provider == "mistral" { Some(mistral::Settings::load()?) } else { None };
+    let saved_mistral = if provider == "mistral" || provider == "cohere" { Some(mistral::Settings::load()?) } else { None };
+    let saved_cohere = if provider == "cohere" { Some(cohere::Settings::load()?) } else { None };
     let requested_model = params.get("model").and_then(Value::as_str).filter(|m| !m.trim().is_empty() && *m != "default");
     let model = requested_model.map(str::to_string).unwrap_or_else(|| {
         if let Some(saved) = &saved {
             saved.model.clone()
         } else if let Some(saved) = &saved_mistral {
+            saved.model.clone()
+        } else if let Some(saved) = &saved_cohere {
             saved.model.clone()
         } else if provider == "legacy" {
             std::env::var("GRIDCRAFT_AGENT_MODEL").ok().filter(|m| !m.trim().is_empty()).unwrap_or_else(|| profile.default_model.into())
@@ -96,12 +103,13 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
             profile.default_model.into()
         }
     });
-    if !settings::valid_model(&model) {
+    if !settings::valid_model(&model) && !cohere::valid_model_public(&model) {
         return Err("Invalid model name (maximum 128 characters).".into());
     }
-    let key = match (&saved, &saved_mistral) {
-        (Some(saved), _) => saved.key()?,
-        (_, Some(saved)) => saved.key()?,
+    let key = match (&saved, &saved_mistral, &saved_cohere) {
+        (Some(saved), _, _) => saved.key()?,
+        (_, Some(saved), _) => saved.key()?,
+        (_, _, Some(saved)) => saved.key()?,
         _ => env(profile.api_key_env)?,
     };
     let steps = params.get("maxSteps").and_then(Value::as_u64).unwrap_or(4);
@@ -220,6 +228,8 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
 fn complete(provider: &str, url: &str, key: &str, body: Value) -> Result<Value, String> {
     if provider == "pollinations" {
         return pollinations::completion(url, key, &body);
+    } else if provider == "cohere" {
+        return cohere::completion(url, key, &body);
     }
     let client = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(90))).build().new_agent();
     let mut response =
@@ -228,8 +238,8 @@ fn complete(provider: &str, url: &str, key: &str, body: Value) -> Result<Value, 
 }
 
 fn completion_body(provider: &str, model: &str, messages: &[Value]) -> Value {
-    let max_completion_tokens = if provider == "pollinations" { 4096 } else { 1800 };
-    let mut body = if provider == "mistral" {
+    let max_completion_tokens = if provider == "pollinations" || provider == "cohere" { 4096 } else { 1800 };
+    let mut body = if provider == "mistral" || provider == "cohere" {
         json!({"model":model,"max_tokens":max_completion_tokens,"messages":messages})
     } else {
         json!({"model":model,"max_completion_tokens":max_completion_tokens,"messages":messages})
@@ -250,14 +260,14 @@ fn message_content(response: &Value) -> Option<String> {
     match content {
         Value::String(text) => Some(text.clone()),
         Value::Array(parts) => {
-            let text = parts.iter().filter_map(|part| part.get("text").and_then(Value::as_str)).collect::<Vec<_>>().join("\n");
+            let text = parts.iter().filter_map(|part| part.get("text").and_then(Value::as_str)).collect::<Vec<_>>().join("\\n");
             (!text.is_empty()).then_some(text)
         }
         _ => None,
     }
 }
 
-fn is_generic_clarification(summary: &str) -> bool {
+pub fn is_generic_clarification(summary: &str) -> bool {
     let summary = summary.to_lowercase();
     [
         "what would you like me to do",
@@ -335,6 +345,12 @@ impl ProviderProfile {
                 base_url_env: Some("GRIDCRAFT_AGENT_POLLINATIONS_BASE_URL"),
                 api_key_env: "GRIDCRAFT_AGENT_POLLINATIONS_API_KEY",
                 default_model: settings::DEFAULT_MODEL,
+            }),
+            "cohere" => Ok(Self {
+                base_url: "https://api.kilo.ai/v1",
+                base_url_env: Some("GRIDCRAFT_AGENT_COHERE_BASE_URL"),
+                api_key_env: "GRIDCRAFT_AGENT_COHERE_API_KEY",
+                default_model: "cohere/north-mini-code:free",
             }),
             "legacy" => Ok(Self {
                 base_url: "http://127.0.0.1:11434/v1",
@@ -503,14 +519,28 @@ mod tests {
         assert_eq!(kimi.default_model, "kimi-k3.1-pro");
         let deepseek = ProviderProfile::for_name("deepseek").unwrap();
         assert_eq!(deepseek.base_url, "https://plusvibeapi.ru/v1");
-        assert_eq!(deepseek.base_url_env, "GRIDCRAFT_AGENT_PLUSVIBE_BASE_URL");
+        assert_eq!(deepseek.base_url_env, Some("GRIDCRAFT_AGENT_PLUSVIBE_BASE_URL"));
         assert_eq!(deepseek.api_key_env, "GRIDCRAFT_AGENT_PLUSVIBE_API_KEY");
         assert_eq!(deepseek.default_model, "deepseek-v4-flash-0731:free");
         let pollinations = ProviderProfile::for_name("pollinations").unwrap();
         assert_eq!(pollinations.base_url, "https://gen.pollinations.ai/v1");
+        assert_eq!(pollinations.base_url_env, Some("GRIDCRAFT_AGENT_POLLINATIONS_BASE_URL"));
         assert_eq!(pollinations.api_key_env, "GRIDCRAFT_AGENT_POLLINATIONS_API_KEY");
         assert_eq!(pollinations.default_model, "openai/gpt-6-luna");
+        let cohere = ProviderProfile::for_name("cohere").unwrap();
+        assert_eq!(cohere.base_url, "https://api.kilo.ai/v1");
+        assert_eq!(cohere.base_url_env, Some("GRIDCRAFT_AGENT_COHERE_BASE_URL"));
+        assert_eq!(cohere.api_key_env, "GRIDCRAFT_AGENT_COHERE_API_KEY");
+        assert_eq!(cohere.default_model, "cohere/north-mini-code:free");
         assert!(ProviderProfile::for_name("https://attacker.example").is_err());
+    }
+
+    #[test]
+    fn cohere_requests_json_with_low_reasoning_and_larger_completion_budget() {
+        let messages = vec![json!({"role":"user","content":"synthetic"})];
+        let body = completion_body("cohere", "cohere/north-mini-code:free", &messages);
+        assert_eq!(body["model"], "cohere/north-mini-code:free");
+        assert_eq!(body["max_tokens"], 4096);
     }
 
     #[test]
