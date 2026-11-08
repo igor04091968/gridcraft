@@ -307,6 +307,12 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
             Err(e) => cx.warn(format!("PivotTables on sheet \"{name}\" could not be read: {e}")),
         }
         sheet.preserved = kept.sheet(&mut cx, &rel.target, &name);
+        // Read slicers for this sheet
+        let slicer_caches = crate::slicer::read_slicer_caches(&mut cx, &wb_rels);
+        sheet.slicers = crate::slicer::read_slicers(&mut cx, &rel.target, &slicer_caches);
+        // Read timelines for this sheet
+        let timeline_caches = crate::slicer::read_timeline_caches(&mut cx, &wb_rels);
+        sheet.timelines = crate::slicer::read_timelines(&mut cx, &rel.target, &timeline_caches);
         sheet.file_id = se.attr_u32("sheetId").unwrap_or(0);
         sheet.visibility = match se.attr("state") {
             Some("hidden") => Visibility::Hidden,

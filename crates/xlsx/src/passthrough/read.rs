@@ -268,17 +268,52 @@ impl KeptReader {
             x.push_str("/>");
             p.elements.push(PreservedXml { slot: "fileVersion".into(), xml: x });
         }
-        let calc_features = wb_xml
-            .child("extLst")
-            .and_then(|l| l.kids("ext").find(|e| e.attr("uri").is_some_and(|u| u.eq_ignore_ascii_case(CALC_FEATURES_URI))))
-            .and_then(|e| e.child("calcFeatures"));
-        if let Some(c) = calc_features {
-            let mut x = format!("<ext uri=\"{CALC_FEATURES_URI}\" xmlns:xcalcf=\"{NS_CALC_FEATURES}\"><xcalcf:calcFeatures>");
-            for name in c.kids("feature").filter_map(|f| f.attr("name")) {
-                let _ = write!(x, "<xcalcf:feature name=\"{}\"/>", esc_attr(name));
+        if let Some(ext_lst) = wb_xml.child("extLst") {
+            for ext in ext_lst.kids("ext") {
+                let uri = ext.attr("uri").unwrap_or("");
+                let mut x = format!("<ext uri=\"{}\"", esc_attr(uri));
+                // Preserve namespace declarations from the ext element
+                for (k, v) in &ext.attrs {
+                    if k != "uri" {
+                        let _ = write!(x, " {}=\"{}\"", esc_attr(k), esc_attr(v));
+                    }
+                }
+                x.push_str(">");
+                // Copy all child elements verbatim
+                for child in &ext.children {
+                    let mut child_xml = String::new();
+                    let _ = write!(child_xml, "<{}>", child.name);
+                    for (k, v) in &child.attrs {
+                        let _ = write!(child_xml, " {}=\"{}\"", esc_attr(k), esc_attr(v));
+                    }
+                    if !child.children.is_empty() {
+                        // Has children - write opening tag, children, closing tag
+                        x.push_str(&child_xml);
+                        x.push_str(">");
+                        for grandchild in &child.children {
+                            let mut gc_xml = String::new();
+                            let _ = write!(gc_xml, "<{}>", grandchild.name);
+                            for (k, v) in &grandchild.attrs {
+                                let _ = write!(gc_xml, " {}=\"{}\"", esc_attr(k), esc_attr(v));
+                            }
+                            gc_xml.push_str(">");
+                            gc_xml.push_str("</");
+                            gc_xml.push_str(&grandchild.name);
+                            gc_xml.push_str(">");
+                            x.push_str(&gc_xml);
+                        }
+                        x.push_str("</");
+                        x.push_str(&child.name);
+                        x.push_str(">");
+                    } else {
+                        // Self-closing tag
+                        child_xml.push_str("/>");
+                        x.push_str(&child_xml);
+                    }
+                }
+                x.push_str("</ext>");
+                p.elements.push(PreservedXml { slot: "ext".into(), xml: x });
             }
-            x.push_str("</xcalcf:calcFeatures></ext>");
-            p.elements.push(PreservedXml { slot: "ext".into(), xml: x });
         }
         (!p.is_empty()).then(|| Arc::new(p))
     }

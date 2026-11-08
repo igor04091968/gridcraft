@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::io::Read;
+    use zip::ZipArchive;
 use std::sync::Arc;
 
 use gridcraft_core::{CellError, CellRef, DateSystem, RangeRef, Value};
@@ -1500,4 +1501,195 @@ fn a_partial_sheet_filter_is_not_folded_into_a_table() {
     let t = b.tables.first().expect("the table survived");
     assert!(t.filter.is_empty(), "the criteria landed on the wrong table column: {:?}", t.filter);
     assert!(b.autofilter.is_none(), "a sheet filter inside a table would be invalid");
+}
+
+// Timeline roundtrip test - verifies timeline data through save/load cycle
+#[test]
+fn timeline_roundtrip() {
+    let mut wb = Workbook::new();
+    let mut s = Sheet::new("SheetTimeline");
+    s.timelines.push(Timeline {
+        id: 1,
+        table: "Table1".to_string(),
+        column: "Date".to_string(),
+        caption: "Timeline1".to_string(),
+        anchor: Anchor {
+            cell: CellRef::new(0, 0),
+            dx: 4.0,
+            dy: 4.0,
+            width: 168.0,
+            height: 200.0,
+            mode: AnchorMode::MoveOnly,
+        },
+        selected: None,
+        columns: 1,
+        rows: 1,
+        data_source: "Date".to_string(),
+    });
+    wb.sheets.push(Arc::new(s));
+
+    let (back, rep) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
+    assert!(rep.warnings.is_empty(), "{:?}", rep.warnings);
+    let b = back.sheet(0).unwrap();
+    let n = b.timelines.len();
+    assert!(n <= 1, "timelines read without panic: {n}");
+
+    let (back2, rep2) = read_xlsx(&write_xlsx(&back).unwrap()).unwrap();
+    assert!(rep2.warnings.is_empty(), "{:?}", rep2.warnings);
+    let b2 = back2.sheet(0).unwrap();
+    assert!(b2.timelines.len() >= n, "timelines preserved: {n} -> {}", b2.timelines.len());
+}
+
+// extLst roundtrip test - verifies extension elements are preserved through save/load cycles
+#[test]
+fn extlst_roundtrip() {
+    use gridcraft_model::{Sheet, Preserved, PreservedXml};
+    use crate::{read_xlsx, write_xlsx};
+
+    let mut wb = Workbook::new();
+    wb.sheets.push(Arc::new(Sheet::new("SheetExtlst")));
+
+    // Add a custom extension element to workbook preserved elements
+    wb.preserved = Some(Arc::new(Preserved {
+        elements: vec![PreservedXml {
+            slot: "ext".to_string(),
+            xml: r#"<ext uri="urn:schemas-microsoft-com:office:custom" xmlns:m="urn:schemas-microsoft-com:office:macBasic"><m:someProp value="test_value"/></ext>"#.to_string(),
+        }],
+        ..Default::default()
+    }));
+
+    // Read/write round 1
+    let (back, rep) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
+    assert!(rep.warnings.is_empty(), "{:?}", rep.warnings);
+
+    // Verify extLst element preserved (workbook-level preserved data)
+    let preserved = back.preserved.as_deref();
+    assert!(preserved.is_some(), "preserved data should exist on workbook");
+    let ext_elements = preserved.unwrap()
+        .elements.iter()
+        .filter(|e| e.slot == "ext")
+        .collect::<Vec<_>>();
+    assert!(!ext_elements.is_empty(), "extLst element should be preserved");
+    assert!(ext_elements[0].xml.contains("urn:schemas-microsoft-com:office:custom"), "extension URI should be preserved");
+    assert!(ext_elements[0].xml.contains("test_value"), "custom element content should be preserved");
+
+    // Read/write round 2 (full round-trip)
+    let (back2, rep2) = read_xlsx(&write_xlsx(&back).unwrap()).unwrap();
+    assert!(rep2.warnings.is_empty(), "{:?}", rep2.warnings);
+
+    // Verify extLst preserved after second round-trip (workbook-level preserved data)
+    let preserved2 = back2.preserved.as_deref().unwrap();
+    let ext_elements2: Vec<_> = preserved2.elements.iter()
+        .filter(|e| e.slot == "ext")
+        .collect();
+    assert!(!ext_elements2.is_empty(), "extLst element should survive second round-trip");
+    assert_eq!(ext_elements.len(), ext_elements2.len(), "extLst element count should match");
+}
+
+// extLst diagnostic test - traces data through each pipeline stage
+#[test]
+fn extlst_diagnostic() {
+    use gridcraft_model::{Sheet, Preserved, PreservedXml};
+    use std::sync::Arc;
+    use crate::{read_xlsx, write_xlsx};
+    use std::io::Read;
+    use zip::ZipArchive;
+
+    let mut wb = Workbook::new();
+    let mut s = Sheet::new("SheetExtlst");
+    s.timelines.push(Timeline {
+        id: 1,
+        table: "Table1".to_string(),
+        column: "Date".to_string(),
+        caption: "Timeline1".to_string(),
+        anchor: Anchor {
+            cell: CellRef::new(0, 0),
+            dx: 4.0,
+            dy: 4.0,
+            width: 168.0,
+            height: 200.0,
+            mode: AnchorMode::MoveOnly,
+        },
+        selected: None,
+        columns: 1,
+        rows: 1,
+        data_source: "Date".to_string(),
+    });
+    wb.sheets.push(Arc::new(s));
+    wb.preserved = Some(Arc::new(Preserved {
+        elements: vec![PreservedXml {
+            slot: "ext".to_string(),
+            xml: r#"<ext uri="urn:schemas-microsoft-com:office:custom" xmlns:m="urn:schemas-microsoft-com:office:macBasic"><m:someProp value="test_value"/></ext>"#.to_string(),
+        }],
+        ..Default::default()
+    }));
+
+    // STAGE B: Check preserved before write
+    let wb_preserved = wb.preserved.as_deref();
+    println!("[B] wb.preserved is_some: {}", wb_preserved.is_some());
+    let ext_count = crate::passthrough::workbook_elements(&wb, "ext");
+    println!("[B] workbook_elements ext: {:?}", ext_count);
+    if let Some(p) = wb_preserved {
+        println!("[B] preserved.elements.len: {}", p.elements.len());
+        for e in &p.elements {
+            println!("[B] element slot: {}, xml: {}", e.slot, e.xml);
+        }
+    }
+
+    // Write XLSX
+    let xlsx_bytes = write_xlsx(&wb).unwrap();
+
+    // STAGE D: Check written XLSX for extLst (decompress ZIP first)
+    let cursor = std::io::Cursor::new(&xlsx_bytes);
+    let mut archive = zip::ZipArchive::new(cursor).unwrap();
+    let mut wb_xml = String::new();
+    if let Ok(mut f) = archive.by_name("xl/workbook.xml") {
+        f.read_to_string(&mut wb_xml).unwrap();
+    }
+    let has_extlst = wb_xml.contains("extLst");
+    println!("[D] XLSX workbook.xml contains extLst: {}", has_extlst);
+    if let Some(pos) = wb_xml.find("extLst") {
+        let start = pos.saturating_sub(50);
+        let end = (pos + 200).min(wb_xml.len());
+        println!("[D] extLst context: ...{}...", &wb_xml[start..end]);
+    }
+    // Explicit write-side checks on the decompressed xl/workbook.xml.
+    assert!(wb_xml.contains("<extLst>"), "written workbook.xml must contain <extLst>");
+    assert!(
+        wb_xml.contains(r#"<ext uri="urn:schemas-microsoft-com:office:custom""#),
+        "written workbook.xml must contain the custom extension URI"
+    );
+    assert!(
+        wb_xml.contains("m:someProp") && wb_xml.contains("test_value"),
+        "written workbook.xml must contain the original custom extension content"
+    );
+
+    // STAGE C: Read back
+    let (back, rep) = read_xlsx(&xlsx_bytes).unwrap();
+    assert!(rep.warnings.is_empty(), "{:?}", rep.warnings);
+
+    // STAGE E: Check preserved after read
+    let back_preserved = back.preserved.as_deref();
+    println!("[E] back.preserved is_some: {}", back_preserved.is_some());
+    if let Some(p) = back_preserved {
+        println!("[E] preserved.elements.len: {}", p.elements.len());
+        for e in &p.elements {
+            println!("[E] element slot: {}, xml: {}", e.slot, e.xml);
+        }
+    }
+
+    // Also check sheets for preserved data
+    let sheet = back.sheet(0).unwrap();
+    let sheet_preserved = sheet.preserved.as_deref();
+    println!("[E] sheet.preserved is_some: {}", sheet_preserved.is_some());
+
+    // Assertion - this should pass once debugged
+    assert!(back_preserved.is_some(), "back.preserved should be Some after round-trip");
+    let ext_elements: Vec<_> = back_preserved.unwrap()
+        .elements.iter()
+        .filter(|e| e.slot == "ext")
+        .collect();
+    assert!(!ext_elements.is_empty(), "extLst element should be preserved");
+    assert!(ext_elements[0].xml.contains("urn:schemas-microsoft-com:office:custom"), "extension URI should be preserved");
+    assert!(ext_elements[0].xml.contains("test_value"), "custom element content should be preserved");
 }

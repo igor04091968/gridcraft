@@ -120,6 +120,10 @@ pub struct Out {
     pub drawings: u32,
     pub tables: u32,
     pub comments: u32,
+    /// Mapping from (sheet_idx, slicer_idx) -> slicer_id for adding relationships
+    pub slicer_id_map: std::collections::HashMap<(usize, usize), u32>,
+    /// Mapping from (sheet_idx, timeline_idx) -> timeline_id for adding relationships
+    pub timeline_id_map: std::collections::HashMap<(usize, usize), u32>,
     /// Authors of threaded comments, in first-use order; written to `xl/persons/person.xml`.
     pub persons: Vec<String>,
     pub table_id: u32,
@@ -232,6 +236,8 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>) 
         tables: 0,
         comments: 0,
         persons: vec![],
+        slicer_id_map: std::collections::HashMap::new(),
+        timeline_id_map: std::collections::HashMap::new(),
         table_id: 0,
         dynamic_arrays: false,
         needs_calc: false,
@@ -472,6 +478,11 @@ fn write_sheets(
         let _ = write!(sheets_xml, "<sheet name=\"{}\" sheetId=\"{sheet_id}\"{state} r:id=\"{rid}\"/>", esc_attr(&name));
     }
     sheets_xml.push_str(&kept.sheet_entries(wb.sheets.len(), true, &mut ids));
+    // Write slicers (once per workbook, after all sheets are processed)
+    out.slicer_id_map = crate::slicer::write_slicers(wb, out, wb_rels);
+
+    // Write timelines (once per workbook, after all sheets are processed)
+    out.timeline_id_map = crate::slicer::write_timelines(wb, out, wb_rels);
 
     (sheets_xml, kept, pivots)
 }

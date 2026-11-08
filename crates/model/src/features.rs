@@ -722,6 +722,31 @@ pub struct Slicer {
     pub columns: u32,
 }
 
+/// A timeline filter widget for on-sheet display of a time field's distinct members.
+/// A timeline in Excel consists of two parts:
+/// - timelineCache (xl/timelineCaches/timelineCache{N}.xml): the filter definition with all members
+/// - timeline (xl/timelines/timeline{N}.xml): the on-sheet view (anchor, size, visible columns)
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Timeline {
+    pub id: u32,
+    /// Name of the time field this timeline filters.
+    pub table: String,
+    /// Name of the time column/field within the table.
+    pub column: String,
+    /// Caption shown in the timeline header (defaults to the field name).
+    pub caption: String,
+    pub anchor: Anchor,
+    /// Selected display members. `None` means every member (no filter from this timeline); an empty
+    /// list means nothing is selected (all members hidden).
+    pub selected: Option<Vec<String>>,
+    /// Number of button columns in the layout (Excel default 1).
+    pub columns: u32,
+    /// Number of rows in the timeline layout.
+    pub rows: u32,
+    /// Data source reference for the timeline (the field name in the source table).
+    pub data_source: String,
+}
+
 #[cfg(test)]
 mod trendline_forecast_tests {
     use super::Trendline;

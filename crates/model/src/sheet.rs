@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cell::{Cell, CellPicture};
 use crate::features::{
-    AutoFilter, Chart, Comment, CondFormat, Hyperlink, Image, LineInfo, PivotTable, PrintSettings, Shape, SheetProtection, Slicer, Sparkline, Table,
-    Validation,
+    AutoFilter, Chart, Comment, CondFormat, Hyperlink, Image, LineInfo, PivotTable, PrintSettings, Shape, SheetProtection, Slicer, Sparkline, Table, Timeline, Validation,
 };
 use crate::store::CellStore;
 use crate::style::{Color, StyleId};
@@ -111,6 +110,9 @@ pub struct Sheet {
     /// On-sheet slicer widgets (filter a table column by clicking value tiles).
     #[serde(default)]
     pub slicers: Vec<Slicer>,
+    /// On-sheet timeline widgets (filter a time field's distinct members).
+    #[serde(default)]
+    pub timelines: Vec<Timeline>,
     /// PivotTables whose output lives on this sheet.
     #[serde(default)]
     pub pivots: Vec<PivotTable>,
@@ -182,6 +184,7 @@ impl Sheet {
             shapes: vec![],
             sparklines: vec![],
             slicers: vec![],
+            timelines: vec![],
             pivots: vec![],
             protection: None,
             edit_ranges: vec![],

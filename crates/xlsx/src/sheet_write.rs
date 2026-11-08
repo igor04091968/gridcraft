@@ -196,6 +196,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
 
     write_sheet_drawing(&mut s, wb, si, sheet, &mut rels, out);
     write_sheet_notes(&mut s, sheet, si, &kept, &mut rels, out);
+    write_sheet_slicers(&mut s, sheet, si, &mut rels, out);
     // Tables.
     if !tables.is_empty() {
         let mut parts = String::new();
@@ -351,6 +352,17 @@ fn write_sheet_drawing(s: &mut String, wb: &Workbook, si: usize, sheet: &Sheet, 
         }
         let rid = rels.add("drawing", &format!("../drawings/drawing{dn}.xml"));
         let _ = write!(s, "<drawing r:id=\"{rid}\"/>");
+    }
+}
+
+fn write_sheet_slicers(s: &mut String, sheet: &Sheet, si: usize, rels: &mut Rels, out: &mut Out) {
+    if !sheet.slicers.is_empty() {
+        for (slicer_idx, _slicer) in sheet.slicers.iter().enumerate() {
+            if let Some(&slicer_id) = out.slicer_id_map.get(&(si, slicer_idx)) {
+                let rid = rels.add("slicer", &format!("../slicers/slicer{slicer_id}.xml"));
+                let _ = write!(s, "<slicer r:id=\"{rid}\"/>");
+            }
+        }
     }
 }
 
