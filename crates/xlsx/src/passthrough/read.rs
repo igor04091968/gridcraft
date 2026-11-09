@@ -271,44 +271,55 @@ impl KeptReader {
         if let Some(ext_lst) = wb_xml.child("extLst") {
             for ext in ext_lst.kids("ext") {
                 let uri = ext.attr("uri").unwrap_or("");
-                let mut x = format!("<ext uri=\"{}\"", esc_attr(uri));
+                let mut x = String::from("<ext uri=\"");
+                x.push_str(&esc_attr(uri));
+                x.push('"');
                 // Preserve namespace declarations from the ext element
                 for (k, v) in &ext.attrs {
                     if k != "uri" {
-                        let _ = write!(x, " {}=\"{}\"", esc_attr(k), esc_attr(v));
+                        x.push(' ');
+                        x.push_str(k);
+                        x.push_str("=\"");
+                        x.push_str(&esc_attr(v));
+                        x.push('"');
                     }
                 }
-                x.push_str(">");
+                x.push('>');
                 // Copy all child elements verbatim
                 for child in &ext.children {
-                    let mut child_xml = String::new();
-                    let _ = write!(child_xml, "<{}>", child.name);
+                    let mut open = String::from("<");
+                    open.push_str(&child.name);
                     for (k, v) in &child.attrs {
-                        let _ = write!(child_xml, " {}=\"{}\"", esc_attr(k), esc_attr(v));
+                        open.push(' ');
+                        open.push_str(k);
+                        open.push_str("=\"");
+                        open.push_str(&esc_attr(v));
+                        open.push('"');
                     }
-                    if !child.children.is_empty() {
-                        // Has children - write opening tag, children, closing tag
-                        x.push_str(&child_xml);
-                        x.push_str(">");
+                    if child.children.is_empty() {
+                        // Self-closing tag
+                        open.push_str("/>");
+                        x.push_str(&open);
+                    } else {
+                        // Has children - write opening tag, grandchildren, closing tag
+                        open.push('>');
+                        x.push_str(&open);
                         for grandchild in &child.children {
-                            let mut gc_xml = String::new();
-                            let _ = write!(gc_xml, "<{}>", grandchild.name);
+                            let mut gc = String::from("<");
+                            gc.push_str(&grandchild.name);
                             for (k, v) in &grandchild.attrs {
-                                let _ = write!(gc_xml, " {}=\"{}\"", esc_attr(k), esc_attr(v));
+                                gc.push(' ');
+                                gc.push_str(k);
+                                gc.push_str("=\"");
+                                gc.push_str(&esc_attr(v));
+                                gc.push('"');
                             }
-                            gc_xml.push_str(">");
-                            gc_xml.push_str("</");
-                            gc_xml.push_str(&grandchild.name);
-                            gc_xml.push_str(">");
-                            x.push_str(&gc_xml);
+                            gc.push_str("/>");
+                            x.push_str(&gc);
                         }
                         x.push_str("</");
                         x.push_str(&child.name);
-                        x.push_str(">");
-                    } else {
-                        // Self-closing tag
-                        child_xml.push_str("/>");
-                        x.push_str(&child_xml);
+                        x.push('>');
                     }
                 }
                 x.push_str("</ext>");

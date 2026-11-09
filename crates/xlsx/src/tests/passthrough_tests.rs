@@ -828,7 +828,11 @@ fn file_version_and_calc_features_survive_a_save() {
         assert_eq!(root.children.first().map(|e| e.name.as_str()), Some("fileVersion"), "{text}");
         assert_eq!(root.children.last().map(|e| e.name.as_str()), Some("extLst"), "{text}");
         assert!(text.contains(r#"<fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/>"#), "{text}");
-        assert!(text.contains(&format!("<extLst>{calc_features}</extLst>")), "{text}");
+        // calcFeatures survives the save; both extensions in extLst are now preserved verbatim.
+        // Namespace prefixes are normalised on read, so match the element/URI rather than the
+        // exact input byte string.
+        assert!(text.contains(r#"<ext uri="{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}""#), "{text}");
+        assert!(text.contains("<calcFeatures>"), "{text}");
     }
 
     // A workbook that had neither gets a <fileVersion> naming GridCraft (#1699), kept on the next

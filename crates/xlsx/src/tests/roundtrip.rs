@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 use std::io::Read;
-    use zip::ZipArchive;
 use std::sync::Arc;
 
 use gridcraft_core::{CellError, CellRef, DateSystem, RangeRef, Value};
@@ -1593,7 +1592,6 @@ fn extlst_diagnostic() {
     use std::sync::Arc;
     use crate::{read_xlsx, write_xlsx};
     use std::io::Read;
-    use zip::ZipArchive;
 
     let mut wb = Workbook::new();
     let mut s = Sheet::new("SheetExtlst");
