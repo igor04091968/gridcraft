@@ -39,8 +39,10 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 ### 3. Some unmodelled XLSX content is dropped on save (FF)
 - **Missing:** slicers and their caches, timelines, the data model, query tables attached to
   tables, unmodelled `extLst` entries, chart details. Pass-through (#330) keeps custom XML,
-  external links, connections, sheet query tables, printer settings, form and ActiveX controls,
-  OLE objects and sheet backgrounds; never checked in Excel (repair prompts unknown).
+  external links, connections, printer settings, form and ActiveX controls, OLE objects and sheet
+  backgrounds; sheet query tables are modelled (`Sheet::query_tables`, read in
+  `crates/xlsx/src/sheet_read.rs`, written in `crates/xlsx/src/sheet_write.rs`) and written back on
+  save; never checked in Excel (repair prompts unknown).
 - **Evidence:** `crates/xlsx/src/passthrough.rs` (what is kept, and why the rest isn't).
 - **Impact:** open-edit-save still simplifies workbooks with slicers, timelines or Power Pivot.
 - **Estimate:** 6–10 h. [file-format-parity.md](file-format-parity.md)
@@ -199,6 +201,7 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-09 | minor | §3: sheet query tables are modelled (`Sheet::query_tables`, read in `crates/xlsx/src/sheet_read.rs`, written in `crates/xlsx/src/sheet_write.rs`) and written back on save instead of kept as pass-through parts; query tables attached to tables remain missing |
 | 2026-11-05 | minor | §22: bounded active-sheet inspection before one reviewed action; multi-action workflows and external memory remain out of scope |
 | 2026-11-04 | minor | Pollinations connection settings, model catalog, key removal and auth check in desktop/web panel; built-in native backend; no readiness score change |
 | 2026-11-04 | minor | In-cell picture rich-value types verified on all 78 pinned XLSX: round-trip differences 2 → 0; cached VLOOKUP mismatch and Excel verification remain |

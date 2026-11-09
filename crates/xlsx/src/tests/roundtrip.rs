@@ -1512,14 +1512,7 @@ fn timeline_roundtrip() {
         table: "Table1".to_string(),
         column: "Date".to_string(),
         caption: "Timeline1".to_string(),
-        anchor: Anchor {
-            cell: CellRef::new(0, 0),
-            dx: 4.0,
-            dy: 4.0,
-            width: 168.0,
-            height: 200.0,
-            mode: AnchorMode::MoveOnly,
-        },
+        anchor: Anchor { cell: CellRef::new(0, 0), dx: 4.0, dy: 4.0, width: 168.0, height: 200.0, mode: AnchorMode::MoveOnly },
         selected: None,
         columns: 1,
         rows: 1,
@@ -1542,8 +1535,8 @@ fn timeline_roundtrip() {
 // extLst roundtrip test - verifies extension elements are preserved through save/load cycles
 #[test]
 fn extlst_roundtrip() {
-    use gridcraft_model::{Sheet, Preserved, PreservedXml};
     use crate::{read_xlsx, write_xlsx};
+    use gridcraft_model::{Preserved, PreservedXml, Sheet};
 
     let mut wb = Workbook::new();
     wb.sheets.push(Arc::new(Sheet::new("SheetExtlst")));
@@ -1564,10 +1557,7 @@ fn extlst_roundtrip() {
     // Verify extLst element preserved (workbook-level preserved data)
     let preserved = back.preserved.as_deref();
     assert!(preserved.is_some(), "preserved data should exist on workbook");
-    let ext_elements = preserved.unwrap()
-        .elements.iter()
-        .filter(|e| e.slot == "ext")
-        .collect::<Vec<_>>();
+    let ext_elements = preserved.unwrap().elements.iter().filter(|e| e.slot == "ext").collect::<Vec<_>>();
     assert!(!ext_elements.is_empty(), "extLst element should be preserved");
     assert!(ext_elements[0].xml.contains("urn:schemas-microsoft-com:office:custom"), "extension URI should be preserved");
     assert!(ext_elements[0].xml.contains("test_value"), "custom element content should be preserved");
@@ -1578,9 +1568,7 @@ fn extlst_roundtrip() {
 
     // Verify extLst preserved after second round-trip (workbook-level preserved data)
     let preserved2 = back2.preserved.as_deref().unwrap();
-    let ext_elements2: Vec<_> = preserved2.elements.iter()
-        .filter(|e| e.slot == "ext")
-        .collect();
+    let ext_elements2: Vec<_> = preserved2.elements.iter().filter(|e| e.slot == "ext").collect();
     assert!(!ext_elements2.is_empty(), "extLst element should survive second round-trip");
     assert_eq!(ext_elements.len(), ext_elements2.len(), "extLst element count should match");
 }
@@ -1588,10 +1576,10 @@ fn extlst_roundtrip() {
 // extLst diagnostic test - traces data through each pipeline stage
 #[test]
 fn extlst_diagnostic() {
-    use gridcraft_model::{Sheet, Preserved, PreservedXml};
-    use std::sync::Arc;
     use crate::{read_xlsx, write_xlsx};
+    use gridcraft_model::{Preserved, PreservedXml, Sheet};
     use std::io::Read;
+    use std::sync::Arc;
 
     let mut wb = Workbook::new();
     let mut s = Sheet::new("SheetExtlst");
@@ -1600,14 +1588,7 @@ fn extlst_diagnostic() {
         table: "Table1".to_string(),
         column: "Date".to_string(),
         caption: "Timeline1".to_string(),
-        anchor: Anchor {
-            cell: CellRef::new(0, 0),
-            dx: 4.0,
-            dy: 4.0,
-            width: 168.0,
-            height: 200.0,
-            mode: AnchorMode::MoveOnly,
-        },
+        anchor: Anchor { cell: CellRef::new(0, 0), dx: 4.0, dy: 4.0, width: 168.0, height: 200.0, mode: AnchorMode::MoveOnly },
         selected: None,
         columns: 1,
         rows: 1,
@@ -1653,10 +1634,7 @@ fn extlst_diagnostic() {
     }
     // Explicit write-side checks on the decompressed xl/workbook.xml.
     assert!(wb_xml.contains("<extLst>"), "written workbook.xml must contain <extLst>");
-    assert!(
-        wb_xml.contains(r#"<ext uri="urn:schemas-microsoft-com:office:custom""#),
-        "written workbook.xml must contain the custom extension URI"
-    );
+    assert!(wb_xml.contains(r#"<ext uri="urn:schemas-microsoft-com:office:custom""#), "written workbook.xml must contain the custom extension URI");
     assert!(
         wb_xml.contains("m:someProp") && wb_xml.contains("test_value"),
         "written workbook.xml must contain the original custom extension content"
@@ -1683,11 +1661,52 @@ fn extlst_diagnostic() {
 
     // Assertion - this should pass once debugged
     assert!(back_preserved.is_some(), "back.preserved should be Some after round-trip");
-    let ext_elements: Vec<_> = back_preserved.unwrap()
-        .elements.iter()
-        .filter(|e| e.slot == "ext")
-        .collect();
+    let ext_elements: Vec<_> = back_preserved.unwrap().elements.iter().filter(|e| e.slot == "ext").collect();
     assert!(!ext_elements.is_empty(), "extLst element should be preserved");
     assert!(ext_elements[0].xml.contains("urn:schemas-microsoft-com:office:custom"), "extension URI should be preserved");
     assert!(ext_elements[0].xml.contains("test_value"), "custom element content should be preserved");
+}
+
+// Query table round-trip: a modelled query table survives write → read.
+#[test]
+fn query_table_roundtrip() {
+    use crate::{read_xlsx, write_xlsx};
+    use gridcraft_model::{QueryTable, Sheet};
+    use std::sync::Arc;
+
+    let mut sheet = Sheet::new("SheetQuery");
+    sheet.query_tables.push(QueryTable {
+        name: "ExternalData_1".into(),
+        connection_id: 1,
+        auto_format_id: 16,
+        apply_number_formats: false,
+        apply_border_formats: false,
+        apply_font_formats: false,
+        apply_pattern_formats: false,
+        apply_alignment_formats: false,
+        apply_width_height_formats: false,
+    });
+    let mut wb = Workbook::new();
+    wb.sheets.push(Arc::new(sheet));
+
+    let (back, rep) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
+    assert!(rep.warnings.is_empty(), "{:?}", rep.warnings);
+    // `Workbook::new()` pre-seeds "Sheet1" at index 0; our query-table sheet is index 1.
+    let s = back.sheet(1).unwrap();
+    assert_eq!(
+        s.query_tables.len(),
+        1,
+        "query table should survive round-trip: {:?}",
+        back.sheets.iter().map(|s| s.query_tables.len()).collect::<Vec<_>>()
+    );
+    let qt = &s.query_tables[0];
+    assert_eq!(qt.name, "ExternalData_1", "query table name should be preserved");
+    assert_eq!(qt.connection_id, 1, "query table connection id should be preserved");
+    assert_eq!(qt.auto_format_id, 16, "query table auto format id should be preserved");
+    assert!(!qt.apply_number_formats, "applyNumberFormats should be preserved");
+    assert!(!qt.apply_border_formats, "applyBorderFormats should be preserved");
+    assert!(!qt.apply_font_formats, "applyFontFormats should be preserved");
+    assert!(!qt.apply_pattern_formats, "applyPatternFormats should be preserved");
+    assert!(!qt.apply_alignment_formats, "applyAlignmentFormats should be preserved");
+    assert!(!qt.apply_width_height_formats, "applyWidthHeightFormats should be preserved");
 }

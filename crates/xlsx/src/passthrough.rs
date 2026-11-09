@@ -3,7 +3,7 @@
 //! On read, the raw bytes of unmodelled parts are kept with their content type and their
 //! relationship graph, per owner: the package root (custom document properties, ribbon
 //! customisation, add-in task panes), the workbook (custom XML, links to external workbooks with
-//! their `<externalReferences>`, data connections, XML maps) and each sheet (query tables, cells
+//! their `<externalReferences>`, data connections, XML maps) and each sheet (cells
 //! mapped to XML elements, form controls, ActiveX controls, OLE objects, the sheet background and
 //! printer settings, with the sheet's `<picture>`, `<oleObjects>` and `<controls>` XML, the `r:id`
 //! of `<pageSetup>`, the legacy VML shapes those controls need and the pictures of the headers and
@@ -94,7 +94,7 @@ const PACKAGE_ROOTS: &[&str] = &["custom-properties", "extensibility", "webexten
 /// Relationship kinds kept from the workbook without a workbook element.
 const WORKBOOK_ROOTS: &[&str] = &["customXml", "connections", "xmlMaps"];
 /// Relationship kinds kept from a sheet without a sheet element.
-const SHEET_ROOTS: &[&str] = &["queryTable", "tableSingleCells"];
+const SHEET_ROOTS: &[&str] = &["tableSingleCells"];
 /// Sheet relationship kinds that mean the sheet XML may hold elements worth keeping.
 const SHEET_ELEMENT_KINDS: &[&str] = &["oleObject", "ctrlProp", "control", "image", "package", "printerSettings"];
 /// Attributes of `<fileVersion>` (CT_FileVersion).
@@ -160,7 +160,6 @@ const OWN_DIRS: &[&str] = &[
     "xl/externallinks/",
     "xl/connections.xml",
     "xl/xmlmaps.xml",
-    "xl/querytables/",
     "xl/ctrlprops/",
     "xl/embeddings/",
     "xl/activex/",

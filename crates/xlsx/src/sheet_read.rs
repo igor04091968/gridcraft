@@ -8,8 +8,8 @@ use gridcraft_core::{CellError, CellRef, DateSystem, MAX_COLS, MAX_ROWS, RangeRe
 use gridcraft_formula::Expr;
 use gridcraft_model::{
     AutoFilter, Cell, CfOperator, CfRule, CfValueKind, Comment, CondFormat, EditRange, ErrorStyle, FilterCriterion, Formula, Hyperlink, LineInfo,
-    NoteBox, NoteCorner, Orientation, PasswordHash, Sheet, SheetProtection, Sparkline, SparklineKind, Table, TableColumn, TotalsFn, Validation,
-    ValidationKind, XmlColumnPr,
+    NoteBox, NoteCorner, Orientation, PasswordHash, QueryTable, Sheet, SheetProtection, Sparkline, SparklineKind, Table, TableColumn, TotalsFn,
+    Validation, ValidationKind, XmlColumnPr,
 };
 
 use crate::IoError;
@@ -275,6 +275,8 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
             read_threaded(cx, &x, &mut sheet);
         }
     }
+    // Query tables are separate parts referenced by the sheet, not elements of it.
+    read_sheet_query_tables(cx, &rels, &mut sheet)?;
     // Which notes are displayed (`<x:Visible/>`) and where their boxes sit live in the VML shapes.
     // Best effort: the VML is only read for those, so a part that doesn't parse is skipped without
     // a warning.
@@ -329,6 +331,35 @@ fn read_protected_ranges(e: &El, sheet: &mut Sheet) {
         let title = p.attr("name").unwrap_or("").to_string();
         sheet.edit_ranges.push(EditRange { title, ranges, password, security_descriptor: p.attr("securityDescriptor").map(str::to_string) });
     }
+}
+
+/// Read a query table part (`xl/queryTables/queryTableN.xml`). The element carries the name, the
+/// connection it reads through and the formatting flags; the sheet range it lands on is the table
+/// range it sits on, which GridCraft matches up on save.
+fn read_query_table(x: &El) -> Option<QueryTable> {
+    let name = x.attr("name")?.to_string();
+    let connection_id = x.attr_u32("connectionId")?;
+    Some(QueryTable {
+        name,
+        connection_id,
+        auto_format_id: x.attr_u32("autoFormatId").unwrap_or(0),
+        apply_number_formats: x.flag("applyNumberFormats", true),
+        apply_border_formats: x.flag("applyBorderFormats", true),
+        apply_font_formats: x.flag("applyFontFormats", true),
+        apply_pattern_formats: x.flag("applyPatternFormats", true),
+        apply_alignment_formats: x.flag("applyAlignmentFormats", true),
+        apply_width_height_formats: x.flag("applyWidthHeightFormats", true),
+    })
+}
+
+/// Read the query tables (`xl/queryTables/*.xml`) referenced by the sheet's relationships.
+fn read_sheet_query_tables(cx: &mut Ctx<'_>, rels: &[Rel], sheet: &mut Sheet) -> Result<(), IoError> {
+    for rel in rels.iter().filter(|r| r.kind == "queryTable") {
+        let Some(x) = cx.optional_xml(&rel.target)? else { continue };
+        let Some(qt) = read_query_table(&x) else { continue };
+        sheet.query_tables.push(qt);
+    }
+    Ok(())
 }
 
 fn read_views(e: &El, sheet: &mut Sheet) {

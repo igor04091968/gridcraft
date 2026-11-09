@@ -14,7 +14,8 @@ use crate::fmla::text_to_file;
 use crate::styles::{color_attrs, dxf_id};
 use crate::tables::{paper_id, px_to_col_width, px_to_pt};
 use crate::write::{
-    CT_CHART, CT_COMMENTS, CT_DRAWING, CT_TABLE, CT_THREADED_COMMENTS, NS_MAIN, NS_REL, NS_THREADED, Out, REL_THREADED_COMMENT, Rels, XML_DECL,
+    CT_CHART, CT_COMMENTS, CT_DRAWING, CT_QUERY_TABLE, CT_TABLE, CT_THREADED_COMMENTS, NS_MAIN, NS_REL, NS_THREADED, Out, REL_THREADED_COMMENT, Rels,
+    XML_DECL,
 };
 use crate::xml::{encode_xstring, esc, esc_attr, num, push_a1, push_u64};
 
@@ -213,9 +214,33 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         }
         let _ = write!(s, "<tableParts count=\"{}\">{parts}</tableParts>", tables.len());
     }
+    // Query tables are separate parts referenced by a sheet relationship (not `<tablePart>`).
+    write_query_tables(sheet, out, &mut rels);
     write_sheet_extensions(&mut s, sheet, &prio);
     s.push_str("</worksheet>");
     (s, rels)
+}
+
+/// Write the sheet's query tables as `xl/queryTables/*.xml` parts, each referenced by a sheet
+/// relationship (query tables are not `<tablePart>` elements of the sheet XML).
+fn write_query_tables(sheet: &Sheet, out: &mut Out, rels: &mut Rels) {
+    for (i, qt) in sheet.query_tables.iter().enumerate() {
+        let n = i + 1;
+        let xml = format!(
+            r#"<queryTable xmlns="{NS_MAIN}" name="{}" connectionId="{}" autoFormatId="{}" applyNumberFormats="{}" applyBorderFormats="{}" applyFontFormats="{}" applyPatternFormats="{}" applyAlignmentFormats="{}" applyWidthHeightFormats="{}" />"#,
+            esc_attr(&qt.name),
+            qt.connection_id,
+            qt.auto_format_id,
+            if qt.apply_number_formats { 1 } else { 0 },
+            if qt.apply_border_formats { 1 } else { 0 },
+            if qt.apply_font_formats { 1 } else { 0 },
+            if qt.apply_pattern_formats { 1 } else { 0 },
+            if qt.apply_alignment_formats { 1 } else { 0 },
+            if qt.apply_width_height_formats { 1 } else { 0 },
+        );
+        out.part(&format!("xl/queryTables/queryTable{n}.xml"), Some(CT_QUERY_TABLE), xml.into_bytes());
+        rels.add("queryTable", &format!("../queryTables/queryTable{n}.xml"));
+    }
 }
 
 struct CellWriteInput<'a> {

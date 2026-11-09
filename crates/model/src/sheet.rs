@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::cell::{Cell, CellPicture};
 use crate::features::{
-    AutoFilter, Chart, Comment, CondFormat, Hyperlink, Image, LineInfo, PivotTable, PrintSettings, Shape, SheetProtection, Slicer, Sparkline, Table, Timeline, Validation,
+    AutoFilter, Chart, Comment, CondFormat, Hyperlink, Image, LineInfo, PivotTable, PrintSettings, QueryTable, Shape, SheetProtection, Slicer,
+    Sparkline, Table, Timeline, Validation,
 };
 use crate::store::CellStore;
 use crate::style::{Color, StyleId};
@@ -98,6 +99,9 @@ pub struct Sheet {
     pub cond_formats: Vec<CondFormat>,
     pub validations: Vec<Validation>,
     pub tables: Vec<Table>,
+    /// Query tables (external data ranges) whose results are placed on this sheet.
+    #[serde(default)]
+    pub query_tables: Vec<QueryTable>,
     pub autofilter: Option<AutoFilter>,
     #[serde(with = "crate::cellmap")]
     pub comments: BTreeMap<CellRef, Comment>,
@@ -127,8 +131,8 @@ pub struct Sheet {
     /// Normal, Page Layout or Page Break Preview.
     #[serde(default)]
     pub view: SheetViewMode,
-    /// Unmodelled file content of this sheet kept for saving (form controls, OLE objects, query
-    /// tables). Goes away with the sheet; not in JSON.
+    /// Unmodelled file content of this sheet kept for saving (form controls, OLE objects, printer
+    /// settings). Goes away with the sheet; not in JSON.
     #[serde(skip)]
     pub preserved: Option<Arc<crate::preserved::Preserved>>,
 }
@@ -176,6 +180,7 @@ impl Sheet {
             cond_formats: vec![],
             validations: vec![],
             tables: vec![],
+            query_tables: vec![],
             autofilter: None,
             comments: BTreeMap::new(),
             hyperlinks: BTreeMap::new(),

@@ -222,17 +222,9 @@ fn unmodelled_parts_survive_a_round_trip() {
 
 fn assert_kept_workbook_parts(u: &Unpacked) {
     // Every kept part is in the output byte for byte.
-    for d in [
-        PRINTER,
-        OLE,
-        EMF,
-        CUSTOM_XML.as_bytes(),
-        CUSTOM_PROPS.as_bytes(),
-        EXTERNAL_LINK.as_bytes(),
-        CONNECTIONS.as_bytes(),
-        QUERY_TABLE.as_bytes(),
-        CTRL_PROP.as_bytes(),
-    ] {
+    for d in
+        [PRINTER, OLE, EMF, CUSTOM_XML.as_bytes(), CUSTOM_PROPS.as_bytes(), EXTERNAL_LINK.as_bytes(), CONNECTIONS.as_bytes(), CTRL_PROP.as_bytes()]
+    {
         assert_eq!(u.find(d).len(), 1, "kept part missing or duplicated: {}", String::from_utf8_lossy(d));
     }
     // Package root: custom properties.
@@ -278,8 +270,6 @@ fn assert_kept_sheet_parts(u: &Unpacked, sheet: &str, sx: &str) {
     // Schema order: pageSetup < legacyDrawing < oleObjects < controls.
     let pos = |t: &str| sx.find(t).unwrap_or_else(|| panic!("no {t}"));
     assert!(pos("<pageSetup") < pos("<legacyDrawing") && pos("<legacyDrawing") < pos("<oleObjects") && pos("<oleObjects") < pos("<controls"));
-    // Query table: a sheet relationship only.
-    assert!(u.rels(sheet).iter().any(|r| r.1.ends_with("/queryTable") && u.parts.get(&r.2).is_some_and(|b| b == QUERY_TABLE.as_bytes())));
     // One VML drawing: the kept control shapes plus GridCraft's note, in a fresh shape block.
     let vml_id = attr_of(sx, "legacyDrawing", "r:id");
     let vml_part = u.target(sheet, &vml_id).1;
@@ -479,9 +469,10 @@ fn kept_vml_drawings_are_charged_to_the_kept_total() {
         assert!(!rep.warnings.iter().any(|w| w.contains("dropped")), "{:?}", rep.warnings);
         wb.preserved.as_ref().map_or(0, |p| p.byte_len()) + wb.sheets.iter().filter_map(|s| s.preserved.as_ref()).map(|p| p.byte_len()).sum::<usize>()
     };
-    // Two sheets share one VML drawing: each would keep its own copy. With room for one sheet's
-    // content only, the second sheet's VML (and the controls drawn from it) is dropped.
-    crate::passthrough::KEPT_TOTAL_FOR_TEST.with(|c| c.set(one + VML.len() / 2));
+    // Query tables are now modelled, so they no longer consume kept bytes. With room for one
+    // sheet's kept content only, the second sheet's VML (and the controls drawn from it) is
+    // dropped.
+    crate::passthrough::KEPT_TOTAL_FOR_TEST.with(|c| c.set(one));
     let read = read_xlsx(&rich_package_with(CONTENT_TYPES, true));
     crate::passthrough::KEPT_TOTAL_FOR_TEST.with(|c| c.set(crate::passthrough::MAX_KEPT_TOTAL));
     let (wb, rep) = read.unwrap();

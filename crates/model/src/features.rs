@@ -121,6 +121,22 @@ impl Table {
     }
 }
 
+/// A query table (external data range): a named connection whose results are placed on a sheet.
+/// The part itself carries the name, the connection it reads through and the formatting flags;
+/// the sheet range the results spill into is the table range it sits on.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct QueryTable {
+    pub name: String,
+    pub connection_id: u32,
+    pub auto_format_id: u32,
+    pub apply_number_formats: bool,
+    pub apply_border_formats: bool,
+    pub apply_font_formats: bool,
+    pub apply_pattern_formats: bool,
+    pub apply_alignment_formats: bool,
+    pub apply_width_height_formats: bool,
+}
+
 // ---------------------------------------------------------------- conditional formatting
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
