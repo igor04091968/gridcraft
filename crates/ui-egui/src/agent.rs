@@ -72,11 +72,13 @@ impl AgentUi {
 
     pub fn restore_preferences(&mut self, value: &Json) {
         if let Some(provider) = value.get("provider").and_then(Json::as_str)
-            && matches!(provider, "openai" | "kimi" | "deepseek" | "mistral" | "pollinations")
+            && matches!(provider, "openai" | "kimi" | "deepseek" | "mistral" | "pollinations" | "kilo")
         {
             self.provider = provider.into();
             if provider == "pollinations" {
                 self.model = POLLINATIONS_DEFAULT_MODEL.into();
+            } else if provider == "kilo" {
+                self.model = "stealth/glyph-cluster".into();
             }
         }
         if let Some(model) = value.get("model").and_then(Json::as_str).filter(|model| valid_model(model)) {
@@ -153,7 +155,7 @@ impl SheetApp {
                     self.agent.reset_connection();
                     self.agent.status =
                         "Соединение прервано. Отправленные команды не повторяются; подключение восстанавливается автоматически.".into();
-                } else if matches!(result.get("provider").and_then(Json::as_str), Some("pollinations" | "mistral"))
+                } else if matches!(result.get("provider").and_then(Json::as_str), Some("pollinations" | "mistral" | "kilo"))
                     && result.get("configured").and_then(Json::as_bool).is_some()
                     && result.get("provider").and_then(Json::as_str) == Some(self.agent.provider.as_str())
                 {
@@ -165,6 +167,8 @@ impl SheetApp {
                         "Ключ настроен."
                     } else if self.agent.provider == "mistral" {
                         "Введите API-ключ Mistral."
+                    } else if self.agent.provider == "kilo" {
+                        "Введите API-ключ Kilo Gateway."
                     } else {
                         "Введите API-ключ Pollinations."
                     }
@@ -179,6 +183,8 @@ impl SheetApp {
                         "Ключ проверен. Сохраните настройки, чтобы использовать его.".into()
                     } else if provider == "mistral" {
                         "Подключение к Mistral проверено.".into()
+                    } else if provider == "kilo" {
+                        "Подключение к Kilo Gateway проверено.".into()
                     } else {
                         "Подключение к Pollinations проверено.".into()
                     };
@@ -333,6 +339,15 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         app.agent.settings_requested = true;
         app.agent_send("agent.settings", json!({"provider":"mistral"}));
     }
+    if app.agent.provider == "kilo"
+        && !app.agent.settings_requested
+        && app.services.agent_send.is_some()
+        && (app.services.agent_connect.is_none() || app.agent.web_connected)
+    {
+        app.agent.settings_requested = true;
+        app.agent_send("agent.settings", json!({"provider":"kilo"}));
+        app.agent_send("agent.models", json!({"provider":"kilo"}));
+    }
     let mut open = app.agent.open;
     let mut close_after_change = false;
     egui::Window::new("AI-агент").id(egui::Id::unique("gridcraft-agent")).open(&mut open).resizable(true).default_width(480.0).show(ctx, |ui| {
@@ -392,6 +407,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     "deepseek" => "DeepSeek (PlusVibe)",
                     "mistral" => "Mistral API",
                     "pollinations" => "Pollinations",
+                    "kilo" => "Kilo Gateway (Glyph Cluster, free)",
                     _ => "Codex (OpenAI API)",
                 })
                 .show_ui(ui, |ui| {
@@ -400,6 +416,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     provider_changed |= ui.selectable_value(&mut app.agent.provider, "deepseek".into(), "DeepSeek (PlusVibe)").changed();
                     provider_changed |= ui.selectable_value(&mut app.agent.provider, "mistral".into(), "Mistral API").changed();
                     provider_changed |= ui.selectable_value(&mut app.agent.provider, "pollinations".into(), "Pollinations").changed();
+                    provider_changed |= ui.selectable_value(&mut app.agent.provider, "kilo".into(), "Kilo Gateway (Glyph Cluster, free)").changed();
                 })
                 .response
                 .labelled_by(label.id);
@@ -418,6 +435,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "deepseek" => "deepseek-v4-flash-0731:free".into(),
                 "mistral" => "mistral-small-latest".into(),
                 "pollinations" => POLLINATIONS_DEFAULT_MODEL.into(),
+                "kilo" => "stealth/glyph-cluster".into(),
                 _ => "gpt-6.1-sol".into(),
             };
         }
@@ -430,6 +448,8 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
             show_pollinations_settings(app, ui);
         } else if app.agent.provider == "mistral" {
             show_mistral_settings(app, ui);
+        } else if app.agent.provider == "kilo" {
+            show_kilo_settings(app, ui);
         } else {
             let key_label = match app.agent.provider.as_str() {
                 "kimi" => "Ключ на сервере: GRIDCRAFT_AGENT_KIMI_API_KEY",
@@ -532,6 +552,70 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
 
 fn valid_model(model: &str) -> bool {
     !model.trim().is_empty() && model.len() <= 128 && !model.chars().any(char::is_control)
+}
+
+fn show_kilo_settings(app: &mut SheetApp, ui: &mut egui::Ui) {
+    egui::CollapsingHeader::new("Настройка Kilo Gateway").default_open(true).show(ui, |ui| {
+        ui.small("Kilo Gateway · модель по умолчанию: Glyph Cluster (stealth/glyph-cluster, free).");
+        ui.horizontal_wrapped(|ui| {
+            let label = ui.label("API-ключ");
+            ui.add(egui::TextEdit::singleline(&mut app.agent.api_key_input).password(true).hint_text(if app.agent.configured {
+                "Ключ сохранён · оставьте пустым, чтобы сохранить его"
+            } else {
+                "Введите API-ключ Kilo Gateway"
+            }))
+            .labelled_by(label.id);
+            if ui.add_enabled(!app.agent.api_key_input.is_empty(), egui::Button::new("Копировать введённый ключ")).clicked() {
+                ui.ctx().copy_text(app.agent.api_key_input.clone());
+                app.agent.status = "Введённый ключ скопирован.".into();
+            }
+            if ui
+                .add_enabled(app.services.paste_text.is_some(), egui::Button::new("Вставить"))
+                .on_hover_text("Вставить API-ключ из системного буфера обмена")
+                .clicked()
+            {
+                paste_api_key_from_clipboard(app, "Kilo Gateway");
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            if app.agent.configured && ui.button("Показать сохранённый ключ").clicked() {
+                app.agent_send("agent.copyKey", json!({"provider":"kilo"}));
+            }
+            if ui.button("Копировать сведения").clicked() {
+                ui.ctx().copy_text(format!("Провайдер: Kilo Gateway; модель: {}; API: https://api.kilo.ai/v1", app.agent.model));
+                app.agent.status = "Сведения скопированы.".into();
+            }
+        });
+        show_revealed_key(app, ui, "kilo");
+        ui.small("Ключ хранится в приватном файле настроек приложения/сервера. В веб-интерфейсе сохраняется только выбор модели.");
+        if !app.agent.models.is_empty() {
+            craft_ui::ComboBox::from_id_salt("kilo-models").selected_text("Выбрать из каталога моделей").show_ui(ui, |ui| {
+                for model in &app.agent.models {
+                    ui.selectable_value(&mut app.agent.model, model.name.clone(), &model.label);
+                }
+            });
+        }
+        if app.agent.model == "stealth/glyph-cluster" {
+            ui.small("Glyph Cluster (free) — модель по умолчанию для Kilo Gateway.");
+        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Сохранить настройки")).clicked() {
+                let key = std::mem::take(&mut app.agent.api_key_input);
+                app.agent_send("agent.configure", json!({"provider":"kilo", "model":app.agent.model, "apiKey":key}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Проверить подключение")).clicked() {
+                app.agent_send("agent.test", json!({"provider":"kilo", "apiKey":app.agent.api_key_input}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Обновить модели")).clicked() {
+                app.agent_send("agent.models", json!({"provider":"kilo"}));
+            }
+            if ui.add_enabled(app.agent.pending.is_empty(), egui::Button::new("Удалить сохранённый ключ")).clicked() {
+                app.agent.api_key_input.clear();
+                app.agent_send("agent.configure", json!({"provider":"kilo", "clearKey":true}));
+            }
+        });
+        ui.label(&app.agent.connection_status);
+    });
 }
 
 fn show_pollinations_settings(app: &mut SheetApp, ui: &mut egui::Ui) {

@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use tungstenite::{Message, WebSocket};
 
 mod cohere;
+mod kilo;
 mod mistral;
 mod pollinations;
 mod settings;
@@ -26,6 +27,7 @@ pub fn handle<S: Read + Write>(ws: &mut WebSocket<S>, request: &Value) -> Result
         "agent.settings" | "agent.configure" | "agent.models" | "agent.test" => match params.get("provider").and_then(Value::as_str) {
             Some("mistral") => mistral::handle(method, &params),
             Some("cohere") => cohere::handle(method, &params),
+            Some("kilo") => kilo::handle(method, &params),
             _ => settings::handle(method, &params),
         },
         "agent.copyKey" => copy_provider_key(&params),
@@ -47,10 +49,12 @@ fn copy_provider_key(params: &Value) -> Result<Value, String> {
     let provider = params.get("provider").and_then(Value::as_str).ok_or("Provider is required.")?;
     let key = if provider == "pollinations" {
         settings::Settings::load()?.key()?
-    } else if provider == "mistral" || provider == "cohere" {
+    } else if provider == "mistral" {
         mistral::Settings::load()?.key()?
     } else if provider == "cohere" {
         cohere::Settings::load()?.key()?
+    } else if provider == "kilo" {
+        kilo::Settings::load()?.key()?
     } else {
         let profile = ProviderProfile::for_name(provider)?;
         if !matches!(provider, "openai" | "kimi" | "deepseek") {
@@ -87,8 +91,9 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     let provider = params.get("provider").and_then(Value::as_str).unwrap_or("legacy");
     let profile = ProviderProfile::for_name(provider)?;
     let saved = if provider == "pollinations" { Some(settings::Settings::load()?) } else { None };
-    let saved_mistral = if provider == "mistral" || provider == "cohere" { Some(mistral::Settings::load()?) } else { None };
+    let saved_mistral = if provider == "mistral" { Some(mistral::Settings::load()?) } else { None };
     let saved_cohere = if provider == "cohere" { Some(cohere::Settings::load()?) } else { None };
+    let saved_kilo = if provider == "kilo" { Some(kilo::Settings::load()?) } else { None };
     let requested_model = params.get("model").and_then(Value::as_str).filter(|m| !m.trim().is_empty() && *m != "default");
     let model = requested_model.map(str::to_string).unwrap_or_else(|| {
         if let Some(saved) = &saved {
@@ -96,6 +101,8 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
         } else if let Some(saved) = &saved_mistral {
             saved.model.clone()
         } else if let Some(saved) = &saved_cohere {
+            saved.model.clone()
+        } else if let Some(saved) = &saved_kilo {
             saved.model.clone()
         } else if provider == "legacy" {
             std::env::var("GRIDCRAFT_AGENT_MODEL").ok().filter(|m| !m.trim().is_empty()).unwrap_or_else(|| profile.default_model.into())
@@ -106,10 +113,11 @@ fn propose<S: Read + Write>(ws: &mut WebSocket<S>, params: &Value) -> Result<Val
     if !settings::valid_model(&model) && !cohere::valid_model_public(&model) {
         return Err("Invalid model name (maximum 128 characters).".into());
     }
-    let key = match (&saved, &saved_mistral, &saved_cohere) {
-        (Some(saved), _, _) => saved.key()?,
-        (_, Some(saved), _) => saved.key()?,
-        (_, _, Some(saved)) => saved.key()?,
+    let key = match (&saved, &saved_mistral, &saved_cohere, &saved_kilo) {
+        (Some(saved), _, _, _) => saved.key()?,
+        (_, Some(saved), _, _) => saved.key()?,
+        (_, _, Some(saved), _) => saved.key()?,
+        (_, _, _, Some(saved)) => saved.key()?,
         _ => env(profile.api_key_env)?,
     };
     let steps = params.get("maxSteps").and_then(Value::as_u64).unwrap_or(4);
@@ -238,8 +246,8 @@ fn complete(provider: &str, url: &str, key: &str, body: Value) -> Result<Value, 
 }
 
 fn completion_body(provider: &str, model: &str, messages: &[Value]) -> Value {
-    let max_completion_tokens = if provider == "pollinations" || provider == "cohere" { 4096 } else { 1800 };
-    let mut body = if provider == "mistral" || provider == "cohere" {
+    let max_completion_tokens = if matches!(provider, "pollinations" | "cohere" | "kilo") { 4096 } else { 1800 };
+    let mut body = if matches!(provider, "mistral" | "cohere" | "kilo") {
         json!({"model":model,"max_tokens":max_completion_tokens,"messages":messages})
     } else {
         json!({"model":model,"max_completion_tokens":max_completion_tokens,"messages":messages})
@@ -351,6 +359,12 @@ impl ProviderProfile {
                 base_url_env: Some("GRIDCRAFT_AGENT_COHERE_BASE_URL"),
                 api_key_env: "GRIDCRAFT_AGENT_COHERE_API_KEY",
                 default_model: "cohere/north-mini-code:free",
+            }),
+            "kilo" => Ok(Self {
+                base_url: "https://api.kilo.ai/v1",
+                base_url_env: Some("GRIDCRAFT_AGENT_KILO_BASE_URL"),
+                api_key_env: "GRIDCRAFT_AGENT_KILO_API_KEY",
+                default_model: "stealth/glyph-cluster",
             }),
             "legacy" => Ok(Self {
                 base_url: "http://127.0.0.1:11434/v1",
